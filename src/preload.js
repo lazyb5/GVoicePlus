@@ -6,6 +6,10 @@
 (async() => {
     // Get this application's execution path.
     const {ipcRenderer} = require('electron');
+
+    // Lets the page-side unread watcher (src/utils/unreadWatcher.js) report the count the moment it changes.
+    window.__gvUnread = (count) => ipcRenderer.send('gv-unread', count);
+
     const appPath = await ipcRenderer.invoke('get-appPath');
 
     // Modify JavaScript's "Notification" class such that all notifications that get generated will have a

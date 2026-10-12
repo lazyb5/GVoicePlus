@@ -1,0 +1,133 @@
+/* M3 Vibrant look, shared by every m3-*.scss theme: tonal surfaces, rounded shapes and accent states.
+   Design language and palettes: https://github.com/luoshenshi/M3-Vibrant (MIT, (c) 2026 Kenzx).
+   Variables ($background, $backdrop, $card, $primary, ...) come from the generated theme file.
+   This file is included AFTER base/mappings, so its rules win ties with them. */
+
+/* Native controls and scrollbars should match the theme's light/dark mode */
+html {
+    color-scheme: $color-scheme;
+}
+
+/* ---- Surfaces: the outer layers sit on a darker backdrop, the panels float on top of it ---- */
+body.gv-root,
+.gv-page,
+mat-sidenav-container,
+mat-sidenav,
+header {
+    background-color: $backdrop;
+}
+
+/* Floating panels: the whole thread-list column (the "Send new message" row AND the threads) is one rounded panel, and
+   so is the conversation, so each is a single colour.  A border in the backdrop colour creates the gap around a panel;
+   because the background is clipped to the padding box, the panel's own rounded corners show through it.
+   box-sizing keeps the borders inside the panels' existing size, otherwise the page grows and an unneeded scrollbar appears. */
+div.threads,
+gv-thread-details {
+    box-sizing: border-box;
+    background-color: $background;
+    background-clip: padding-box;
+    border: 6px solid $backdrop;
+    border-radius: 28px;
+    overflow: hidden;
+}
+
+/* Inside the list panel everything is just the panel colour */
+gv-thread-list {
+    background-color: transparent;
+}
+
+/* ---- No hard separator lines: the tonal surfaces already separate the sections ---- */
+.gv-page > div,
+div.header,
+div.message-entry-container,
+mat-drawer.drawer,
+mat-divider {
+    border-color: transparent;
+}
+
+/* The one divider kept is the faint one between the nav groups */
+.menuDivider {
+    background-color: $outline;
+}
+
+/* Outlined controls (e.g. "Receiving calls") get a quiet outline */
+button.chip {
+    border-color: $outline;
+}
+
+/* ---- Scrollbars: slim, always visible but quiet, a little stronger on hover ---- */
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+    background: transparent;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: rgba($foreground, 0.28);
+    background-clip: content-box;
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    min-height: 40px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: rgba($foreground, 0.5);
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* ---- Navigation: the active destination is a tinted pill; badges use the accent ---- */
+gv-side-nav a.navListItem.active,
+gv-side-nav a[aria-current='page'] {
+    background-color: $primary-container;
+    border-radius: 9999px;
+}
+
+gv-side-nav a.navListItem.active mat-icon,
+gv-side-nav a[aria-current='page'] mat-icon {
+    color: $on-primary-container;
+}
+
+gv-side-nav .mat-badge-content {
+    background-color: $primary;
+    color: $on-primary;
+}
+
+/* ---- Thread list: rounded rows, selected row in the tinted container ---- */
+gv-thread-list-item .container {
+    border-radius: 16px;
+}
+
+gv-thread-list-item .container.active {
+    background-color: $primary-container;
+}
+
+gv-thread-list-item .container.active .title,
+gv-thread-list-item .container.active gv-annotation.participants {
+    color: $on-primary-container;
+}
+
+/* ---- Messages: rounder bubbles (sent bubbles use the accent via the shared mappings) ---- */
+gv-message-item .bubble {
+    border-radius: 20px;
+}
+
+/* ---- Message box: a tonal pill ---- */
+gv-message-entry textarea {
+    background-color: $container-high;
+    border-radius: 9999px;
+    padding-left: 16px;
+}
+
+/* ---- Cards on the "nothing selected" screens ---- */
+mat-card,
+gv-borderless-card {
+    border-radius: 28px;
+    background-color: $container-high;
+}

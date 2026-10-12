@@ -30,3 +30,83 @@ input[type=checkbox] {
     position: relative;
     top:      5px;
 }
+/***************************************************************************************************
+  Theming: when a theme is selected, customize.js sets these variables from the theme's colours and
+  adds the "themed" class to <body>.  With the default theme nothing here applies.
+***************************************************************************************************/
+body.themed {
+    background-color: var(--gv-bg);
+    color:            var(--gv-fg);
+}
+
+body.themed .form-control,
+body.themed select.form-control {
+    background-color: var(--gv-surface);
+    color:            var(--gv-fg);
+    border:           1px solid var(--gv-outline);
+    border-radius:    12px;
+}
+
+body.themed .form-control:focus {
+    background-color: var(--gv-surface);
+    color:            var(--gv-fg);
+    border-color:     var(--gv-primary);
+    box-shadow:       0 0 0 0.2rem var(--gv-outline);
+}
+
+body.themed .form-text,
+body.themed small {
+    color: var(--gv-subtext);
+}
+
+body.themed input[type=checkbox],
+body.themed input[type=range] {
+    accent-color: var(--gv-primary);
+}
+
+body.themed .btn {
+    border-radius: 9999px;
+    padding:       0.375rem 1.1rem;
+}
+
+body.themed .btn-primary {
+    background-color: var(--gv-primary);
+    border-color:     var(--gv-primary);
+    color:            var(--gv-on-primary);
+}
+
+body.themed .btn-secondary {
+    background-color: var(--gv-surface);
+    border-color:     var(--gv-outline);
+    color:            var(--gv-fg);
+}
+
+body.themed .btn:hover,
+body.themed .btn:focus {
+    filter: brightness(1.12);
+    box-shadow: none;
+}
+
+/* Slider: a quiet track with an accent-coloured thumb */
+body.themed input[type=range].form-control {
+    background: transparent;
+    border:     0;
+    box-shadow: none;
+    padding:    0;
+}
+
+body.themed input[type=range]::-webkit-slider-runnable-track {
+    height:        6px;
+    border-radius: 9999px;
+    background:    var(--gv-outline);
+}
+
+body.themed input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width:              18px;
+    height:             18px;
+    margin-top:         -6px;
+    border:             0;
+    border-radius:      50%;
+    background:         var(--gv-primary);
+}

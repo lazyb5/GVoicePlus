@@ -12,12 +12,30 @@
                     <label for="theme" class="font-weight-bold">Theme</label>
                     <select class="form-control" id="theme">
                         <option value="default">Default</option>
-                        <option value="dracula">Dracula</option>
-                        <option value="solar">Solar</option>
-                        <option value="minty">Minty</option>
-                        <option value="cerulean">Cerulean</option>
-                        <option value="darkplus">DarkPlus</option>
-                        <option value="demo">Theme Debug</option>
+                        <optgroup label="M3 Vibrant">
+                            <option value="m3-pumpkin-dark">Pumpkin (Dark)</option>
+                            <option value="m3-pumpkin-light">Pumpkin (Light)</option>
+                            <option value="m3-github-dark">GitHub (Dark)</option>
+                            <option value="m3-github-light">GitHub (Light)</option>
+                            <option value="m3-atom-one-dark">Atom One (Dark)</option>
+                            <option value="m3-atom-one-light">Atom One (Light)</option>
+                            <option value="m3-rose-dark">Rose (Dark)</option>
+                            <option value="m3-rose-light">Rose (Light)</option>
+                            <option value="m3-sepia-dark">Sepia (Dark)</option>
+                            <option value="m3-sepia-light">Sepia (Light)</option>
+                            <option value="m3-green-dark">Green (Dark)</option>
+                            <option value="m3-green-light">Green (Light)</option>
+                            <option value="m3-navy-dark">Navy (Dark)</option>
+                            <option value="m3-navy-light">Navy (Light)</option>
+                        </optgroup>
+                        <optgroup label="Classic">
+                            <option value="dracula">Dracula</option>
+                            <option value="solar">Solar</option>
+                            <option value="minty">Minty</option>
+                            <option value="cerulean">Cerulean</option>
+                            <option value="darkplus">DarkPlus</option>
+                            <option value="demo">Theme Debug</option>
+                        </optgroup>
                     </select>
                 </div>
 
@@ -67,7 +85,21 @@
                         <input class="form-check-input" type="checkbox" id="hide-dialer-sidebar">
                         <label class="form-check-label" for="hide-dialer-sidebar">Hide dialer sidebar</label>
                     </div>
+
+                    <!-- Spell check -->
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="spellcheck">
+                        <label class="form-check-label" for="spellcheck">Check spelling while typing (uses about 30 MB; applies after restart)</label>
+                    </div>
                 </div>
+
+                <!-- Top bar -->
+                <div class="form-group">
+                    <label class="font-weight-bold">Top bar</label>
+                    <div>
+                        <button type="button" class="btn btn-secondary" id="customize-topbar">Choose which items to show...</button>
+                    </div>
+                    <small class="form-text">Closes this window. Then click items in the top bar to hide or show them.</small>
             </div>
 
             <!--Place window buttons in this div.-->

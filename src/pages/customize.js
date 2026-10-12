@@ -12,6 +12,25 @@
     // Retrieve the user's settings store from the main process.
     const prefs = await ipcRenderer.invoke('get-user-prefs');
 
+    // Match this window to the selected theme (see the "themed" rules in customize.css).
+    const applyPalette = async (theme) => {
+        let pal = null;
+        try { pal = await ipcRenderer.invoke('get-theme-palette', theme); } catch (e) { /* older main process: just keep the normal look */ }
+        const root = document.documentElement;
+        const vars = { '--gv-bg': 'bg', '--gv-backdrop': 'backdrop', '--gv-surface': 'surface', '--gv-fg': 'fg',
+                       '--gv-subtext': 'subtext', '--gv-primary': 'primary', '--gv-on-primary': 'onPrimary', '--gv-outline': 'outline' };
+        if (!pal) {
+            document.body.classList.remove('themed');
+            Object.keys(vars).forEach((name) => root.style.removeProperty(name));
+            root.style.removeProperty('color-scheme');
+            return;
+        }
+        Object.keys(vars).forEach((name) => root.style.setProperty(name, pal[vars[name]]));
+        root.style.setProperty('color-scheme', pal.scheme);
+        document.body.classList.add('themed');
+    };
+    await applyPalette(prefs.theme || constants.DEFAULT_SETTING_THEME);
+
     // Populate the "theme" dropdown with the user's currently selected theme.
     // Notify the main process whenever the user selects a different theme.
     const themePicker = document.getElementById('theme');
@@ -19,6 +38,7 @@
     themePicker.addEventListener('change', (e) => {
         const theme = e.target.value;
         ipcRenderer.send('pref-change-theme', theme);
+        applyPalette(theme);
     });
     
     // Set the "zoom" slider to the main window's current zoom level.
@@ -89,6 +109,18 @@
     hideDialerSidebar.addEventListener('change', (e) => {
         const checked = e.target.checked;
         ipcRenderer.send('pref-change-hide-dialer-sidebar', checked);
+    });
+
+    // Set the "spell check" checkbox; the main process applies it the next time the app starts.
+    const spellcheck = document.getElementById('spellcheck');
+    spellcheck.checked = prefs.spellcheck !== false;
+    spellcheck.addEventListener('change', (e) => {
+        ipcRenderer.send('pref-change-spellcheck', e.target.checked);
+    });
+
+    // "Choose which items to show": closes this window and lets the user click items in the main window's top bar.
+    document.getElementById('customize-topbar').addEventListener('click', () => {
+        ipcRenderer.send('topbar-edit');
     });
 
     // Close the window if the user clicks the "Close" button.

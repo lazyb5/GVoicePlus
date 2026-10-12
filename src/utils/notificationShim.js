@@ -1,35 +1,60 @@
 /**********************************************************************************************************************
- * This module's main purpose is to automatically attach a "click" handler onto all Notifications that get
- * created using JavaScript's "Notification" class.  When the attached handler is invoked (i.e. when any
- * Notification gets clicked by the user), a "notification-clicked" event gets sent to the main application
- * process, letting it know that the user has activated a notification.  Secondary to that, Notifications
- * that don't have an icon assigned to them are also modified to display this application's icon.
+ * Replaces the page's "Notification" class with a stand-in that forwards each notification to the main process,
+ * where it is shown as a native Electron notification with an inline reply field (macOS).  Clicks are relayed
+ * back so the page's own handlers still run, and the existing "notification-clicked" event is still sent.
  **********************************************************************************************************************/
 
 const { ipcRenderer } = require('electron');
-const constants = require('../constants.js');
-const path = require('path');
 
-module.exports.notificationShim = function(appPath) {
+module.exports.notificationShim = function (appPath) {
     const OldNotification = Notification;
-    Notification = function (title, options) {
-        // If the specified options don't include an icon for the notification, set the icon to our application icon.
-        if (!options)      { options = {}; }
-        if (!options.icon) { options.icon = path.join(appPath, 'images', constants.APPLICATION_ICON_MEDIUM); }
-                
-        // Create a normal Notification instance using the specified parameters.
-        const oldNotification = new OldNotification(title, options);
-                
-        // Automatically add a click handler, which notifies the main process when a click occurs.
-        oldNotification.addEventListener('click', () => {
-            ipcRenderer.send('notification-clicked', {});
-        });
+    const live = new Map();
+    let nextId = 1;
 
-        return oldNotification;
-    };
+    class ShimNotification extends EventTarget {
+        constructor(title, options = {}) {
+            super();
+            this.title = String(title);
+            this.body = options.body || '';
+            this.tag = options.tag || '';
+            this.data = options.data;
+            this.onclick = null;
+            this.onclose = null;
+            this._id = nextId++;
 
-    Notification.prototype = OldNotification.prototype;
-    Notification.permission = OldNotification.permission;
-    Notification.requestPermission = OldNotification.requestPermission;
+            // Don't let this map grow forever.
+            if (live.size > 50) { live.delete(live.keys().next().value); }
+            live.set(this._id, this);
+
+            ipcRenderer.send('gv-notify', {
+                id: this._id,
+                title: this.title,
+                body: this.body,
+                tag: this.tag,
+                silent: !!options.silent
+            });
+        }
+
+        close() {
+            ipcRenderer.send('gv-notify-close', this._id);
+            live.delete(this._id);
+        }
+
+        static get permission() { return OldNotification.permission; }
+        static requestPermission(...args) { return OldNotification.requestPermission(...args); }
+    }
+
+    // The main process tells us when the user clicked the notification body.
+    ipcRenderer.on('gv-notify-click', (_event, id) => {
+        const n = live.get(id);
+        if (n) {
+            const evt = new Event('click');
+            n.dispatchEvent(evt);
+            if (typeof n.onclick === 'function') { n.onclick(evt); }
+            live.delete(id);
+        }
+        ipcRenderer.send('notification-clicked', {});
+    });
+
+    Notification = ShimNotification;
 };
-

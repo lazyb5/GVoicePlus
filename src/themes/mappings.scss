@@ -180,3 +180,111 @@ gv-dialpad-toggle button {
 }
 
 
+
+
+/* ----------------------------------------------------------------------------------------------------------------
+ * Google Voice's CURRENT markup (gv-thread-list, gv-thread-details, Material "mdc" components, ...).
+ * The mappings above target the previous markup, so large parts of the page were left white.  These were written
+ * from the live page's structure, not guessed, and cover what the app looks like now.
+ * ---------------------------------------------------------------------------------------------------------------- */
+
+/* Page and pane backgrounds.  These white containers sit behind the thread list and conversation panes; painting
+   them is what actually turns the panes dark. */
+body.gv-root,
+.gv-page,
+mat-sidenav-container,
+mat-sidenav,
+mat-sidenav-content,
+mat-drawer-container,
+mat-drawer,
+mat-drawer-content {
+    @extend %list;
+}
+
+/* Thread list */
+gv-thread-list-item .container:hover,
+gv-thread-list-item .container.active {
+    @extend %list-item-active;
+}
+
+gv-thread-list-item .title,
+gv-thread-list-item gv-annotation.participants {
+    @extend %list-item-heading;
+}
+
+gv-thread-list-item gv-annotation.preview,
+gv-thread-list-item .subtitle,
+gv-thread-list-item .timestamp {
+    @extend %list-item-detail;
+}
+
+/* Conversation header */
+gv-thread-details-header .header {
+    @extend %conversation-header;
+}
+
+gv-thread-details-header h2,
+gv-thread-details-header .header-title,
+gv-thread-details-header .secondary-text,
+gv-thread-details-header mat-icon,
+gv-thread-details-header button {
+    @extend %conversation-title;
+}
+
+/* Messages */
+gv-message-item .sender-timestamp span,
+gv-message-item .status {
+    @extend %conversation-timestamp;
+}
+
+gv-message-item .message-row:not(.outgoing) .bubble {
+    @extend %bubble-incoming;
+}
+
+gv-message-item .message-row.outgoing .bubble {
+    @extend %bubble-outgoing;
+}
+
+gv-message-item .bubble gv-annotation {
+    color: inherit;
+}
+
+gv-message-item mat-icon,
+gv-message-entry mat-icon,
+gv-message-entry button {
+    @extend %conversation-title;
+}
+
+/* Side nav and top bar text/icons that Google colors itself */
+gv-side-nav a.navListItem.active,
+gv-side-nav a[aria-current='page'] {
+    @extend %side-nav-item-active;
+}
+
+gv-side-nav .navItemLabel,
+gv-side-nav mat-icon {
+    @extend %side-nav-item;
+}
+
+header .title,
+header mat-icon,
+header a[aria-label='Google Voice'] span {   /* the "Voice" product name next to the logo */
+    @extend %navbar-title;
+}
+
+/* "Nothing selected" screens (e.g. "Hi Daniel! You have 2 unread messages"): a pale surround plus a white card */
+.inbox-summary-container,
+gv-borderless-card,
+mat-card {
+    @extend %list;
+}
+
+gv-inbox-summary,
+gv-inbox-summary div,
+gv-inbox-summary span,
+gv-inbox-summary p,
+gv-inbox-summary h1,
+gv-inbox-summary h2,
+gv-inbox-summary h3 {
+    @extend %conversation-title;
+}

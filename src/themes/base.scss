@@ -133,4 +133,24 @@
     color: $foreground;
 }
 
+/* Message bubbles (used by the mappings for Google Voice's current markup) */
+%bubble-incoming {
+    background-color: $selection;
+    color: $foreground;
+}
+
+/* Text colour on the sent-bubble accent.  Themes may define $on-primary themselves (the M3 themes do). */
+$on-primary: #ffffff !default;
+
+%bubble-outgoing {
+    background-color: $primary;
+    color: $on-primary;
+}
+
+/* The message box itself.  Without a background of its own it stays white, and the light theme text typed into it
+   becomes unreadable.  (Colour only: the shape and size are left exactly as Google draws them.) */
+%conversation-footer textarea {
+    background-color: $selection;
+}
+
 @use 'mappings';

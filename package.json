@@ -10,7 +10,11 @@
    "category": "public.app-category.social-networking",
    "extendInfo": {
     "NSMicrophoneUsageDescription": "This app requires microphone access to capture your voice while on calls."
-   }
+   },
+   "icon": "build/icon.icns",
+   "electronLanguages": [
+    "en"
+   ]
   },
   "dmg": {
    "icon": false
@@ -20,17 +24,36 @@
     "AppImage"
    ],
    "category": "Office"
-  }
+  },
+  "files": [
+   "**/*",
+   "!scripts/**",
+   "!build/**",
+   "!dist/**",
+   "!**/*.md",
+   "!src/themes/m3-vibrant/color.ini",
+   "!screenshots/**"
+  ]
  },
  "scripts": {
   "start": "electron .",
-  "postinstall": "electron-builder install-app-deps",
+  "postinstall": "electron-builder install-app-deps && node scripts/brand-dev-electron.js",
   "build:windows": "electron-builder --windows",
   "build:mac": "electron-builder --mac",
   "build:linux": "electron-builder --linux",
   "build:x64": "electron-builder --mac --windows --linux --x64",
   "build:arm64": "electron-builder --mac --windows --linux --arm64",
-  "release": "electron-builder --mac --windows --linux --x64 --arm64 --publish always"
+  "release": "electron-builder --mac --windows --linux --x64 --arm64 --publish always",
+  "build:mac:dir": "electron-builder --mac --dir",
+  "brand-dev": "node scripts/brand-dev-electron.js",
+  "build:themes": "node scripts/build-themes.js",
+  "prebuild:windows": "npm run build:themes",
+  "prebuild:mac": "npm run build:themes",
+  "prebuild:linux": "npm run build:themes",
+  "prebuild:x64": "npm run build:themes",
+  "prebuild:arm64": "npm run build:themes",
+  "prebuild:mac:dir": "npm run build:themes",
+  "prerelease": "npm run build:themes"
  },
  "keywords": [
   "electron",
@@ -43,12 +66,11 @@
  "license": "ISC",
  "dependencies": {
   "auto-launch": "^5.0.5",
-  "electron-context-menu": "^3.1.1",
-  "electron-store": "^8.0.0",
-  "sass": "^1.32.8"
+  "electron-context-menu": "^3.1.1"
  },
  "devDependencies": {
   "electron": "^35.7.5",
-  "electron-builder": "^26.0.12"
+  "electron-builder": "^26.0.12",
+  "sass": "^1.32.8"
  }
 }
