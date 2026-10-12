@@ -1,76 +1,79 @@
 {
- "name": "voice-desktop-app",
- "version": "2025.102.101",
- "description": "An electron shell wrapper for the google voice app",
- "main": "src/main.js",
- "build": {
-  "appId": "com.jerrkawz.voiceDesktop",
-  "productName": "Voice Desktop",
-  "mac": {
-   "category": "public.app-category.social-networking",
-   "extendInfo": {
-    "NSMicrophoneUsageDescription": "This app requires microphone access to capture your voice while on calls."
-   },
-   "icon": "build/icon.icns",
-   "electronLanguages": [
-    "en"
-   ]
+  "name": "voice-desktop-app",
+  "version": "2025.102.101",
+  "description": "An electron shell wrapper for the google voice app",
+  "main": "src/main.js",
+  "build": {
+    "appId": "com.jerrkawz.voiceDesktop",
+    "productName": "Voice Desktop",
+    "mac": {
+      "category": "public.app-category.social-networking",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "This app requires microphone access to capture your voice while on calls."
+      },
+      "icon": "build/icon.icns",
+      "electronLanguages": [
+        "en"
+      ]
+    },
+    "dmg": {
+      "icon": false
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office"
+    },
+    "files": [
+      "**/*",
+      "!scripts/**",
+      "!build/**",
+      "!dist/**",
+      "!**/*.md",
+      "!src/themes/m3-vibrant/color.ini",
+      "!screenshots/**"
+    ]
   },
-  "dmg": {
-   "icon": false
+  "scripts": {
+    "start": "electron .",
+    "postinstall": "electron-builder install-app-deps && node scripts/brand-dev-electron.js",
+    "build:windows": "electron-builder --windows",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build:x64": "electron-builder --mac --windows --linux --x64",
+    "build:arm64": "electron-builder --mac --windows --linux --arm64",
+    "release": "electron-builder --mac --windows --linux --x64 --arm64 --publish always",
+    "build:mac:dir": "electron-builder --mac --dir",
+    "brand-dev": "node scripts/brand-dev-electron.js",
+    "build:themes": "node scripts/build-themes.js",
+    "prebuild:windows": "npm run build:themes",
+    "prebuild:mac": "npm run build:themes",
+    "prebuild:linux": "npm run build:themes",
+    "prebuild:x64": "npm run build:themes",
+    "prebuild:arm64": "npm run build:themes",
+    "prebuild:mac:dir": "npm run build:themes",
+    "prerelease": "npm run build:themes"
   },
-  "linux": {
-   "target": [
-    "AppImage"
-   ],
-   "category": "Office"
+  "keywords": [
+    "electron",
+    "voice",
+    "wrapper",
+    "desktop",
+    "google"
+  ],
+  "author": "latin-programmer",
+  "license": "ISC",
+  "dependencies": {
+    "auto-launch": "^5.0.5",
+    "electron-context-menu": "^3.1.1"
   },
-  "files": [
-   "**/*",
-   "!scripts/**",
-   "!build/**",
-   "!dist/**",
-   "!**/*.md",
-   "!src/themes/m3-vibrant/color.ini",
-   "!screenshots/**"
-  ]
- },
- "scripts": {
-  "start": "electron .",
-  "postinstall": "electron-builder install-app-deps && node scripts/brand-dev-electron.js",
-  "build:windows": "electron-builder --windows",
-  "build:mac": "electron-builder --mac",
-  "build:linux": "electron-builder --linux",
-  "build:x64": "electron-builder --mac --windows --linux --x64",
-  "build:arm64": "electron-builder --mac --windows --linux --arm64",
-  "release": "electron-builder --mac --windows --linux --x64 --arm64 --publish always",
-  "build:mac:dir": "electron-builder --mac --dir",
-  "brand-dev": "node scripts/brand-dev-electron.js",
-  "build:themes": "node scripts/build-themes.js",
-  "prebuild:windows": "npm run build:themes",
-  "prebuild:mac": "npm run build:themes",
-  "prebuild:linux": "npm run build:themes",
-  "prebuild:x64": "npm run build:themes",
-  "prebuild:arm64": "npm run build:themes",
-  "prebuild:mac:dir": "npm run build:themes",
-  "prerelease": "npm run build:themes"
- },
- "keywords": [
-  "electron",
-  "voice",
-  "wrapper",
-  "desktop",
-  "google"
- ],
- "author": "latin-programmer",
- "license": "ISC",
- "dependencies": {
-  "auto-launch": "^5.0.5",
-  "electron-context-menu": "^3.1.1"
- },
- "devDependencies": {
-  "electron": "^35.7.5",
-  "electron-builder": "^26.0.12",
-  "sass": "^1.32.8"
- }
+  "devDependencies": {
+    "electron": "^41.10.6",
+    "electron-builder": "^26.15.3",
+    "sass": "~1.93.3"
+  },
+  "overrides": {
+    "global-agent": "^4.1.3"
+  }
 }
