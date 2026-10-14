@@ -12,10 +12,11 @@ const unreadWatcher = require('./utils/unreadWatcher');
 const themePalette = require('./utils/themePalette');
 const Store = require('./utils/prefsStore');   // tiny replacement for electron-store (same config.json)
 const Url = require('url');
-require('./utils/replyNotifications').init({ getWindow: () => win });
 
 // Constants
 const store = new Store();
+const codeCopy = require('./utils/codeCopy').init({ getPrefs: () => store.get('prefs') || {} });   // copies verification codes when the setting is on
+require('./utils/replyNotifications').init({ getWindow: () => win, onMessage: (body) => codeCopy.handle(body) });
 const appPath = app.getAppPath();
 const REFRESH_RATE = 60000; // 60 seconds: only a safety net now; unread changes arrive instantly from the page (unreadWatcher)
 const icon = path.join(appPath, 'images', constants.APPLICATION_ICON_MEDIUM);
@@ -585,6 +586,14 @@ ipcMain.on('pref-change-start-minimized', (e, startMinimized) => {
 ipcMain.on('pref-change-spellcheck', (e, enabled) => {
     const prefs = store.get('prefs') || {};
     prefs.spellcheck = !!enabled;
+    store.set('prefs', prefs);
+});
+
+// Called when the "copy verification codes" checkbox has been checked/unchecked.  Off by default; codeCopy.js reads
+// the setting for every message, so it takes effect immediately.
+ipcMain.on('pref-change-copy-codes', (e, enabled) => {
+    const prefs = store.get('prefs') || {};
+    prefs.copyCodes = !!enabled;
     store.set('prefs', prefs);
 });
 

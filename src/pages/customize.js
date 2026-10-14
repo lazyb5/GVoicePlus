@@ -118,6 +118,13 @@
         ipcRenderer.send('pref-change-spellcheck', e.target.checked);
     });
 
+    // Set the "copy verification codes" checkbox (off by default); it takes effect immediately.
+    const copyCodes = document.getElementById('copy-codes');
+    copyCodes.checked = !!prefs.copyCodes;
+    copyCodes.addEventListener('change', (e) => {
+        ipcRenderer.send('pref-change-copy-codes', e.target.checked);
+    });
+
     // "Choose which items to show": closes this window and lets the user click items in the main window's top bar.
     document.getElementById('customize-topbar').addEventListener('click', () => {
         ipcRenderer.send('topbar-edit');

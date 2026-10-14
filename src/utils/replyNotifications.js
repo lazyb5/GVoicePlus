@@ -133,7 +133,7 @@ async function withPageFocus(win, fn) {
     }
 }
 
-module.exports.init = function ({ getWindow }) {
+module.exports.init = function ({ getWindow, onMessage }) {
     let replyQueue = Promise.resolve();   // replies run one at a time: two scripts must not drive the message box together
     const shown = new Map();   // id -> Notification (holding a reference keeps its handlers alive)
     const byTag = new Map();   // tag -> id, so a newer notification replaces an older one
@@ -143,7 +143,14 @@ module.exports.init = function ({ getWindow }) {
             const old = shown.get(byTag.get(tag));
             if (old) { old.close(); }
         }
-        const n = new Notification({ title, body, silent, hasReply: true, replyPlaceholder: 'Reply…' });
+        // onMessage (verification-code copy) runs first so the banner can say when a code was copied.  It must never
+        // be able to stop a notification from showing.
+        let copiedCode = null;
+        try { copiedCode = onMessage ? onMessage(body) : null; } catch (e) { /* ignore */ }
+        const n = new Notification({
+            title, body, silent, hasReply: true, replyPlaceholder: 'Reply…',
+            ...(copiedCode ? { subtitle: 'Code copied (clears in 1 min)' } : {})
+        });
         shown.set(id, n);
         if (tag) { byTag.set(tag, id); }
 
