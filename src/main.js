@@ -121,7 +121,10 @@ function createWindow() {
             spellcheck: prefs.spellcheck !== false,   // on by default; costs ~30 MB, can be switched off in Settings (restart to apply)
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: true,
-            contextIsolation: false
+            contextIsolation: false,
+            // The window is only hidden (not closed) when you dismiss it.  Chromium slows a hidden page's timers to
+            // ~1/s, then ~1/min, which stalls inline replies and the unread watcher until the window is reopened.
+            backgroundThrottling: false
         }
     })
     if (process.env.GV_DEVTOOLS) { win.webContents.openDevTools({ mode: 'detach' }); }

@@ -7,6 +7,7 @@
  **********************************************************************************************************************/
 
 const { ipcMain, Notification } = require('electron');
+const ts = () => new Date().toISOString().slice(11, 23);   // HH:MM:SS.mmm UTC, for the [reply] debug log
 
 // Selectors, taken from Google Voice's current markup.  They are deliberately light on class names: custom element
 // tags and a few structural hooks.  If a reply fails with a code like 'input-not-found', this is the place to fix.
@@ -62,7 +63,7 @@ async function pageReply(name, text, SEL, dryRun, body) {
         if (!(await waitFor(targetActive, 25, 120))) { return 'thread-mismatch'; }
     }
 
-    const box = await waitFor(() => document.querySelector(SEL.input), 15, 120);
+    let box = await waitFor(() => document.querySelector(SEL.input), 15, 120);
     if (!box) { return 'input-not-found'; }
     const getText = () => (box.isContentEditable ? box.innerText : box.value) || '';
     const setText = (value) => {
@@ -91,14 +92,49 @@ async function pageReply(name, text, SEL, dryRun, body) {
     if (send.disabled) { restoreDraft(); return 'send-disabled'; }
     if (dryRun) { restoreDraft(); return 'ok-dryrun (send button: ' + (label(send) || send.tagName.toLowerCase()) + ')'; }
     send.click();
-    if (draft) { await sleep(500); restoreDraft(); }
+    // Google empties the message box once it accepts the message, so wait for that instead of assuming the click
+    // worked.  The box element can be re-created, so look it up again each time.  If our text is still there after
+    // about 3 s the send is "unconfirmed": the box is left alone (the text is not lost), nothing is retried (a slow
+    // send must not go out twice) and the caller tells the user to check the thread.
+    const sentText = norm(text);
+    const stillInBox = () => {
+        const b = document.querySelector(SEL.input);
+        return !!b && norm(b.isContentEditable ? b.innerText : b.value).includes(sentText);
+    };
+    if (!(await waitFor(() => !stillInBox(), 25, 120))) { return 'send-unconfirmed'; }
+    box = document.querySelector(SEL.input) || box;
+    if (draft) { await sleep(200); restoreDraft(); }
     return 'ok';
 }
 
 module.exports.SEL = SEL;
 module.exports.pageReplySource = pageReply.toString();   // exported so the reply path can be tested without sending
 
+// Google's send step (reCAPTCHA, then the request) does not run until the page is focused: with the window hidden,
+// minimized or in the background the click is accepted but the message sits until the user brings the window
+// forward.  Chromium's focus emulation makes the page believe it is focused for the length of one reply and is
+// switched off again afterwards; any failure here is ignored (the reply is still attempted).
+async function withPageFocus(win, fn) {
+    const dbg = win.webContents.debugger;
+    let attachedHere = false;
+    let emulating = false;
+    try {
+        if (!dbg.isAttached()) { dbg.attach('1.3'); attachedHere = true; }
+        await dbg.sendCommand('Emulation.setFocusEmulationEnabled', { enabled: true });
+        emulating = true;
+    } catch (e) {
+        console.log(`${ts()} [reply] focus emulation unavailable: ${e && e.message}`);
+    }
+    try {
+        return await fn();
+    } finally {
+        try { if (emulating) { await dbg.sendCommand('Emulation.setFocusEmulationEnabled', { enabled: false }); } } catch (e) { /* ignore */ }
+        try { if (attachedHere && dbg.isAttached()) { dbg.detach(); } } catch (e) { /* ignore */ }
+    }
+}
+
 module.exports.init = function ({ getWindow }) {
+    let replyQueue = Promise.resolve();   // replies run one at a time: two scripts must not drive the message box together
     const shown = new Map();   // id -> Notification (holding a reference keeps its handlers alive)
     const byTag = new Map();   // tag -> id, so a newer notification replaces an older one
 
@@ -115,27 +151,39 @@ module.exports.init = function ({ getWindow }) {
             if (!event.sender.isDestroyed()) { event.sender.send('gv-notify-click', id); }
         });
 
-        n.on('reply', async (_e, replyText) => {
+        n.on('reply', (_e, replyText) => {
             const text = (replyText || '').trim();
             if (!text) { return; }
-            const win = getWindow();
-            let result = 'no-window';
-            if (win && !win.isDestroyed()) {
-                try {
-                    result = await win.webContents.executeJavaScript(
-                        `(${pageReply.toString()})(${JSON.stringify(title)}, ${JSON.stringify(text)}, ${JSON.stringify(SEL)}, false, ${JSON.stringify(body || '')})`
-                    );
-                } catch (e) {
-                    result = 'error';
+            const queuedAt = Date.now();
+            const w = getWindow();
+            console.log(`${ts()} [reply] event received (${text.length} chars) visible=${!!w && w.isVisible()} minimized=${!!w && w.isMinimized()} focused=${!!w && w.isFocused()}`);
+            replyQueue = replyQueue.then(async () => {
+                const t0 = Date.now();
+                const win = getWindow();
+                let result = 'no-window';
+                if (win && !win.isDestroyed()) {
+                    try {
+                        const run = () => win.webContents.executeJavaScript(
+                            `(${pageReply.toString()})(${JSON.stringify(title)}, ${JSON.stringify(text)}, ${JSON.stringify(SEL)}, false, ${JSON.stringify(body || '')})`
+                        );
+                        result = win.isFocused() ? await run() : await withPageFocus(win, run);
+                    } catch (e) {
+                        result = 'error';
+                    }
                 }
-            }
-            if (result !== 'ok') {
-                new Notification({ title: `Reply to ${title} not sent (${result})`, body: text }).show();
-            }
+                console.log(`${ts()} [reply] result=${result} after ${Date.now() - t0} ms (queued ${t0 - queuedAt} ms)`);
+                if (result !== 'ok') {
+                    const heading = result === 'send-unconfirmed'
+                        ? `Reply to ${title} not confirmed - check the thread`
+                        : `Reply to ${title} not sent (${result})`;
+                    new Notification({ title: heading, body: text }).show();
+                }
+            }).catch((e) => console.log(`${ts()} [reply] unexpected error: ${e && e.message}`));
         });
 
         n.on('close', () => { shown.delete(id); });
         n.show();
+        console.log(`${ts()} [notify] shown id=${id}`);
     });
 
     ipcMain.on('gv-notify-close', (_e, id) => {
