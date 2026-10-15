@@ -1,5 +1,6 @@
 /**********************************************************************************************************************
- * Paste an image (Cmd+V) into the message box and have it attached to the draft, like the "Add image" button does.
+ * Paste an image (Cmd+V) into the message box, or drag image files onto the open conversation, and have them attached
+ * to the draft, like the "Add image" button does.
  * Google Voice keeps a hidden file input inside the compose area (gv-message-entry); the pasted image is handed to it
  * as if it had been picked from the file dialog.  Nothing is ever sent automatically: the image shows up as an
  * attachment and the person presses Send.
@@ -62,13 +63,13 @@ function pageImagePaste() {
         }
     };
 
-    const attach = (entry, file) => {
+    const attach = (entry, files) => {
         // The compose area can be redrawn while the image is being prepared, so look the input up again.
         const live = entry.isConnected ? entry : document.querySelector('gv-message-entry');
         const input = live && live.querySelector('input[type="file"]');
         if (!input) { throw new Error('no input'); }
         const dt = new DataTransfer();
-        dt.items.add(file);
+        [].concat(files).forEach((f) => dt.items.add(f));
         input.files = dt.files;
         input.dispatchEvent(new Event('change', { bubbles: true }));
     };
@@ -89,6 +90,31 @@ function pageImagePaste() {
         prepare(file)
             .then((f) => attach(entry, f))
             .catch(() => toast('Could not attach the pasted image'));
+    }, true);
+
+    // Drag and drop: drop image files anywhere on the open conversation.  Any file dropped on the window is also kept
+    // from navigating the window to the file, which is what Electron does by default.
+    const hasFiles = (e) => !!(e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') !== -1);
+    const overThread = (e) => !!(e.target && e.target.closest && e.target.closest('gv-thread-details'));
+    document.addEventListener('dragover', (e) => {
+        if (!hasFiles(e)) { return; }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = overThread(e) ? 'copy' : 'none';
+    }, true);
+    document.addEventListener('drop', (e) => {
+        if (!hasFiles(e)) { return; }
+        e.preventDefault();
+        if (!overThread(e)) { return; }
+        e.stopPropagation();
+        const entry = document.querySelector('gv-message-entry');
+        const input = entry && entry.querySelector('input[type="file"]');
+        if (!input) { toast('Open a conversation first'); return; }
+        let images = Array.from(e.dataTransfer.files || []).filter((f) => f.type.indexOf('image/') === 0);
+        if (!images.length) { toast('Only images can be attached'); return; }
+        if (!input.multiple && images.length > 1) { images = images.slice(0, 1); toast('Attached the first image only'); }
+        Promise.all(images.map(prepare))
+            .then((prepared) => attach(entry, prepared))
+            .catch(() => toast('Could not attach the dropped image'));
     }, true);
 
     window.__gvImagePaste = { prepare };   // exposed for testing
