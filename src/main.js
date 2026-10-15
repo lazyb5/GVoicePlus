@@ -9,6 +9,7 @@ const CSSInjector = require('./utils/cssInjector');
 const contrastGuard = require('./utils/contrastGuard');
 const topBar = require('./utils/topBar');
 const unreadWatcher = require('./utils/unreadWatcher');
+const imagePaste = require('./utils/imagePaste');
 const themePalette = require('./utils/themePalette');
 const Store = require('./utils/prefsStore');   // tiny replacement for electron-store (same config.json)
 const Url = require('url');
@@ -221,6 +222,7 @@ function createWindow() {
         contrastGuard.start(win, theme);
         topBar.apply(win, hiddenTopBarItems());
         unreadWatcher.start(win);
+        imagePaste.start(win);
     });
 
     // Create our system notification area icon.
