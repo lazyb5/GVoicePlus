@@ -54,9 +54,11 @@ async function pageReply(name, text, SEL, dryRun, body) {
 
     if (!targetActive()) {
         let row = targetRow();
-        if (!row && !document.querySelector(SEL.thread)) {   // not on the Messages tab: go there first
+        // Thread not in the list being shown: that is usually because another tab is open (Calls, Voicemail, Spam...),
+        // and those tabs have rows too, so "no rows at all" is not a good test.  Go to Messages unless already there.
+        if (!row && !/\/messages(\/|$)/.test(location.pathname)) {
             const nav = document.querySelector(SEL.messagesNav);
-            if (nav) { nav.click(); row = await waitFor(targetRow, 12, 150); }
+            if (nav) { nav.click(); row = await waitFor(targetRow, 20, 150); }
         }
         if (!row) { return 'thread-not-found'; }
         (row.querySelector(SEL.rowClick) || row).click();
