@@ -33,6 +33,18 @@
     padding-top: 12px;
 }
 
+/*Two equal columns, used to keep the settings short enough to fit without scrolling.*/
+.two-col {
+    display:               grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap:            24px;
+    row-gap:               6px;
+}
+
+#first-row .form-group {
+    margin-bottom: 12px;
+}
+
 /*Give checkboxes a slightly larger size that normal.*/
 input[type=checkbox] {
     width:    20px;

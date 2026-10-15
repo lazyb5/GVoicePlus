@@ -474,8 +474,8 @@ function showSettingsWindow() {
         // Create our Settings window, keeping a global reference to it.  This reference allows
         // us to know when the window is open, preventing the user from opening it a second time.
         settingsWindow = new BrowserWindow({
-            width: 600,
-            height: 600,
+            width: 680,
+            height: 560,
             title: 'Settings',
             parent: win,
             modal: true,

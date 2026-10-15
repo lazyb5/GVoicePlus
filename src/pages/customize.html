@@ -1,3 +1,4 @@
+
 <html>
     <head>
         <link rel="stylesheet" href="customize.css">
@@ -7,47 +8,49 @@
         <div class="dialog-grid">
             <!--Place setting controls in this div.-->
             <div id="first-row">
-                <!--"Theme" dropdown-->
-                <div class="form-group">
-                    <label for="theme" class="font-weight-bold">Theme</label>
-                    <select class="form-control" id="theme">
-                        <option value="default">Default</option>
-                        <optgroup label="M3 Vibrant">
-                            <option value="m3-pumpkin-dark">Pumpkin (Dark)</option>
-                            <option value="m3-pumpkin-light">Pumpkin (Light)</option>
-                            <option value="m3-github-dark">GitHub (Dark)</option>
-                            <option value="m3-github-light">GitHub (Light)</option>
-                            <option value="m3-atom-one-dark">Atom One (Dark)</option>
-                            <option value="m3-atom-one-light">Atom One (Light)</option>
-                            <option value="m3-rose-dark">Rose (Dark)</option>
-                            <option value="m3-rose-light">Rose (Light)</option>
-                            <option value="m3-sepia-dark">Sepia (Dark)</option>
-                            <option value="m3-sepia-light">Sepia (Light)</option>
-                            <option value="m3-green-dark">Green (Dark)</option>
-                            <option value="m3-green-light">Green (Light)</option>
-                            <option value="m3-navy-dark">Navy (Dark)</option>
-                            <option value="m3-navy-light">Navy (Light)</option>
-                        </optgroup>
-                        <optgroup label="Classic">
-                            <option value="dracula">Dracula</option>
-                            <option value="solar">Solar</option>
-                            <option value="minty">Minty</option>
-                            <option value="cerulean">Cerulean</option>
-                            <option value="darkplus">DarkPlus</option>
-                            <option value="demo">Theme Debug</option>
-                        </optgroup>
-                    </select>
-                </div>
+                <div class="two-col">
+                    <!--"Theme" dropdown-->
+                    <div class="form-group">
+                        <label for="theme" class="font-weight-bold">Theme</label>
+                        <select class="form-control" id="theme">
+                            <option value="default">Default</option>
+                            <optgroup label="M3 Vibrant">
+                                <option value="m3-pumpkin-dark">Pumpkin (Dark)</option>
+                                <option value="m3-pumpkin-light">Pumpkin (Light)</option>
+                                <option value="m3-github-dark">GitHub (Dark)</option>
+                                <option value="m3-github-light">GitHub (Light)</option>
+                                <option value="m3-atom-one-dark">Atom One (Dark)</option>
+                                <option value="m3-atom-one-light">Atom One (Light)</option>
+                                <option value="m3-rose-dark">Rose (Dark)</option>
+                                <option value="m3-rose-light">Rose (Light)</option>
+                                <option value="m3-sepia-dark">Sepia (Dark)</option>
+                                <option value="m3-sepia-light">Sepia (Light)</option>
+                                <option value="m3-green-dark">Green (Dark)</option>
+                                <option value="m3-green-light">Green (Light)</option>
+                                <option value="m3-navy-dark">Navy (Dark)</option>
+                                <option value="m3-navy-light">Navy (Light)</option>
+                            </optgroup>
+                            <optgroup label="Classic">
+                                <option value="dracula">Dracula</option>
+                                <option value="solar">Solar</option>
+                                <option value="minty">Minty</option>
+                                <option value="cerulean">Cerulean</option>
+                                <option value="darkplus">DarkPlus</option>
+                                <option value="demo">Theme Debug</option>
+                            </optgroup>
+                        </select>
+                    </div>
 
-                <!--"Zoom" slider-->
-                <div class="form-group">
-                    <label class="font-weight-bold" style="margin-bottom: 0" for="zoom">Zoom (%)</label>
-                    <div class="form-row">
-                        <div class="col">
-                            <input type="number" class="form-control" id="zoom" min="25" max="500" step="5" />
-                        </div>
-                        <div class="col-auto">
-                            <button type="button" class="btn btn-secondary" id="reset-zoom">Reset</button>
+                    <!--"Zoom" percent box-->
+                    <div class="form-group">
+                        <label class="font-weight-bold" for="zoom">Zoom (%)</label>
+                        <div class="form-row">
+                            <div class="col">
+                                <input type="number" class="form-control" id="zoom" min="25" max="500" step="5" />
+                            </div>
+                            <div class="col-auto">
+                                <button type="button" class="btn btn-secondary" id="reset-zoom">Reset</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -55,72 +58,74 @@
                 <!--Options-->
                 <div class="form-group">
                     <label class="font-weight-bold">Options</label>
+                    <div class="two-col">
+                        <!--"Show menu bar" checkbox (Windows/Linux only, will get hidden for Mac)-->
+                        <div class="form-check" id="show-menubar-div">
+                            <input class="form-check-input" type="checkbox" id="show-menubar">
+                            <label class="form-check-label" for="show-menubar">Show menu bar</label>
+                        </div>
 
-                    <!--"Show menu bar" checkbox (Windows/Linux only, will get hidden for Mac)-->
-                    <div class="form-check" id="show-menubar-div">
-                        <input class="form-check-input" type="checkbox" id="show-menubar">
-                        <label class="form-check-label" for="show-menubar">Show menu bar</label>
+                        <!--"Start automatically" checkbox-->
+                        <div class="form-check" title="Start the application automatically at logon.">
+                            <input class="form-check-input" type="checkbox" id="start-automatically">
+                            <label class="form-check-label" for="start-automatically">Start at logon</label>
+                        </div>
+
+                        <!--"Start minimized" checkbox-->
+                        <div class="form-check" title="Start the application minimized to the tray.">
+                            <input class="form-check-input" type="checkbox" id="start-minimized">
+                            <label class="form-check-label" for="start-minimized">Start minimized to tray</label>
+                        </div>
+
+                        <!--"Exit on close" checkbox-->
+                        <div class="form-check" title="Exit the application when the main window is closed.">
+                            <input class="form-check-input" type="checkbox" id="exit-on-close">
+                            <label class="form-check-label" for="exit-on-close">Exit when window closes</label>
+                        </div>
+
+                        <!-- Spell check -->
+                        <div class="form-check" title="Uses about 30 MB. Applies after restart.">
+                            <input class="form-check-input" type="checkbox" id="spellcheck">
+                            <label class="form-check-label" for="spellcheck">Check spelling (needs restart)</label>
+                        </div>
+
+                        <!-- Verification codes -->
+                        <div class="form-check" title="Copies codes from new messages to the clipboard, then clears it after 1 minute.">
+                            <input class="form-check-input" type="checkbox" id="copy-codes">
+                            <label class="form-check-label" for="copy-codes">Copy verification codes</label>
+                        </div>
                     </div>
-
-                    <!--"Start automatically" checkbox-->
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="start-automatically">
-                        <label class="form-check-label" for="start-automatically">Start application automatically at logon</label>
-                    </div>
-
-                    <!--"Start minimized" checkbox-->
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="start-minimized">
-                        <label class="form-check-label" for="start-minimized">Start application minimized to tray</label>
-                    </div>
-
-                    <!--"Exit on close" checkbox-->
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="exit-on-close">
-                        <label class="form-check-label" for="exit-on-close">Exit application when main window is closed</label>
-                    </div>
-
-                    <!-- Spell check -->
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="spellcheck">
-                        <label class="form-check-label" for="spellcheck">Check spelling while typing (uses about 30 MB; applies after restart)</label>
-                    </div>
-
-                    <!-- Verification codes -->
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="copy-codes">
-                        <label class="form-check-label" for="copy-codes">Copy verification codes</label>
-                        <small class="form-text">Copies codes from new messages to the clipboard, then clears it after 1 minute.</small>
-                    </div>
-
                 </div>
 
                 <!-- Top bar and sidebars -->
                 <div class="form-group">
                     <label class="font-weight-bold">Top bar and sidebars</label>
-                    <div>
-                        <button type="button" class="btn btn-secondary" id="customize-topbar">Choose which items to show...</button>
-                    </div>
-                    <small class="form-text">Closes this window. Then click items in the top bar to hide or show them.</small>
+                    <div class="two-col">
+                        <div>
+                            <button type="button" class="btn btn-secondary" id="customize-topbar">Choose which items to show...</button>
+                            <small class="form-text">Closes this window. Then click items in the top bar to hide or show them.</small>
 
-                    <!-- Hide dialer sidebar -->
-                    <div class="form-check" style="margin-top: 12px">
-                        <input class="form-check-input" type="checkbox" id="hide-dialer-sidebar">
-                        <label class="form-check-label" for="hide-dialer-sidebar">Hide dialer sidebar</label>
-                    </div>
+                            <!-- Hide dialer sidebar -->
+                            <div class="form-check" style="margin-top: 12px">
+                                <input class="form-check-input" type="checkbox" id="hide-dialer-sidebar">
+                                <label class="form-check-label" for="hide-dialer-sidebar">Hide dialer sidebar</label>
+                            </div>
+                        </div>
 
-                    <!-- Collapse sidebar -->
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="collapse-side-nav">
-                        <label class="form-check-label" for="collapse-side-nav">Collapse sidebar</label>
-                        <small class="form-text">Keeps the left navigation hidden at any window width. The hamburger button shows it over the page, as in a small window.</small>
-                    </div>
+                        <div>
+                            <!-- Collapse sidebar -->
+                            <div class="form-check" title="Keeps the left navigation hidden at any window width. The hamburger button shows it over the page, as in a small window.">
+                                <input class="form-check-input" type="checkbox" id="collapse-side-nav">
+                                <label class="form-check-label" for="collapse-side-nav">Collapse sidebar</label>
+                                <small class="form-text">Hidden at any width; the hamburger shows it.</small>
+                            </div>
 
-                    <!-- Show sidebar on hover -->
-                    <div class="form-check" style="margin-left: 20px">
-                        <input class="form-check-input" type="checkbox" id="hover-side-nav">
-                        <label class="form-check-label" for="hover-side-nav">Show it when hovering</label>
-                        <small class="form-text">Opens it when the mouse touches the hamburger button or the left edge of the page, and hides it when the mouse moves away.</small>
+                            <!-- Show sidebar on hover -->
+                            <div class="form-check" style="margin-left: 20px; margin-top: 8px" title="Opens it when the mouse touches the hamburger button or the left edge of the page, and hides it when the mouse moves away.">
+                                <input class="form-check-input" type="checkbox" id="hover-side-nav">
+                                <label class="form-check-label" for="hover-side-nav">Show it when hovering</label>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

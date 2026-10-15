@@ -118,6 +118,26 @@
     } catch (e) { /* never let this break the page */ }
 })();
 
+// While the sidebar is collapsed, Google's floating sidebar moves keyboard focus to its first item ("Calls") each time it
+// opens, which paints a grey highlight on it.  Undo that unless the person really focused something there: a click inside
+// the sidebar, or a recent key press (Tab / arrow keys), is left alone.
+(() => {
+    try {
+        let lastKey = 0;
+        let pointerInDrawer = false;
+        document.addEventListener('keydown', () => { lastKey = Date.now(); }, true);
+        document.addEventListener('pointerdown', (e) => {
+            const d = document.querySelector('mat-sidenav');
+            pointerInDrawer = !!d && d.contains(e.target);
+        }, true);
+        document.addEventListener('focusin', (e) => {
+            if (!window.__gvForceNarrow || pointerInDrawer || Date.now() - lastKey < 1500) { return; }
+            const d = document.querySelector('mat-sidenav');
+            if (d && d.contains(e.target) && typeof e.target.blur === 'function') { e.target.blur(); }
+        }, true);
+    } catch (e) { /* never let this break the page */ }
+})();
+
 (async() => {
     // Get this application's execution path.
     const {ipcRenderer} = require('electron');
