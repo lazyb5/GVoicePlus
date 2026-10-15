@@ -86,11 +86,12 @@ class Injector {
             this.styleKey = null;
         }
 
+        let done = Promise.resolve();
         if (theme !== 'default') {
             try {
                 const styles = themeCss(this.app, theme);
                 if (this.win) {
-                    this.win.webContents.insertCSS(styles).then(key => {
+                    done = this.win.webContents.insertCSS(styles).then(key => {
                         this.styleKey = key;
                     });
                 }
@@ -99,6 +100,7 @@ class Injector {
                 console.error(`Could not find theme ${theme}`);
             }
         }
+        return done;   // resolves once the theme is actually in the page
     }
 }
 

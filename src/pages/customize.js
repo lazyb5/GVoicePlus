@@ -30,6 +30,8 @@
         document.body.classList.add('themed');
     };
     await applyPalette(prefs.theme || constants.DEFAULT_SETTING_THEME);
+    // The window starts hidden; now that it is themed, ask the main process to show it.
+    requestAnimationFrame(() => requestAnimationFrame(() => ipcRenderer.send('settings-ready')));
 
     // Populate the "theme" dropdown with the user's currently selected theme.
     // Notify the main process whenever the user selects a different theme.
@@ -44,17 +46,26 @@
     // Set the "zoom" slider to the main window's current zoom level.
     // Notify the main process whenever the user selects a new level.
     const zoomSlider = document.getElementById('zoom');
-    zoomSlider.value = await ipcRenderer.invoke('get-zoom-level');
+    // Electron zoom "levels" are logarithmic (each step is 1.2x, level 0 = 100%), so convert
+    // to and from a plain percentage that the user can type.
+    const levelToPercent = (level) => Math.round(Math.pow(1.2, level) * 100);
+    const percentToLevel = (percent) => Math.log(percent / 100) / Math.log(1.2);
+    zoomSlider.value = levelToPercent(await ipcRenderer.invoke('get-zoom-level'));
     zoomSlider.addEventListener('change', (e) => {
-        const zoomLevel = e.target.value;
-        ipcRenderer.send('pref-change-zoom', zoomLevel);
+        let percent = parseFloat(e.target.value);
+        if (isNaN(percent)) {
+            percent = 100;
+        }
+        percent = Math.min(500, Math.max(25, Math.round(percent)));
+        zoomSlider.value = percent;
+        ipcRenderer.send('pref-change-zoom', percentToLevel(percent));
     });
 
-    // Whenever the user clicks the "reset zoom" button, set the "zoom"
-    // slider back to 0 and notify the main process of this new value.
+    // Whenever the user clicks the "reset zoom" button, set the zoom
+    // box back to 100 and notify the main process of this new value.
     const zoomResetButton = document.getElementById('reset-zoom');
     zoomResetButton.addEventListener('click', (e) => {
-        zoomSlider.value = 0;
+        zoomSlider.value = 100;
         ipcRenderer.send('pref-change-zoom', 0);
     });
     
@@ -109,6 +120,21 @@
     hideDialerSidebar.addEventListener('change', (e) => {
         const checked = e.target.checked;
         ipcRenderer.send('pref-change-hide-dialer-sidebar', checked);
+    });
+
+    // Set the "collapse sidebar" checkbox (off by default); it takes effect immediately.
+    const collapseSideNav = document.getElementById('collapse-side-nav');
+    collapseSideNav.checked = !!prefs.collapseSideNav;
+    // "Show it when hovering" only makes sense while the sidebar is collapsed.
+    const hoverSideNav = document.getElementById('hover-side-nav');
+    hoverSideNav.checked = !!prefs.hoverSideNav;
+    hoverSideNav.disabled = !collapseSideNav.checked;
+    collapseSideNav.addEventListener('change', (e) => {
+        hoverSideNav.disabled = !e.target.checked;
+        ipcRenderer.send('pref-change-collapse-side-nav', e.target.checked);
+    });
+    hoverSideNav.addEventListener('change', (e) => {
+        ipcRenderer.send('pref-change-hover-side-nav', e.target.checked);
     });
 
     // Set the "spell check" checkbox; the main process applies it the next time the app starts.

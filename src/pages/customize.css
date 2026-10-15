@@ -16,10 +16,21 @@
 ***************************************************************************************************/
 .dialog-grid {
     display:               grid;
-    grid-template-rows:    auto min-content;
-    grid-template-columns: auto;
+    grid-template-rows:    minmax(0, 1fr) min-content;
+    grid-template-columns: minmax(0, 1fr);
     height:                100vh;
     padding:               20px;
+}
+
+/*The settings scroll inside the first row, so the Close button below always stays visible.*/
+#first-row {
+    overflow-y: auto;
+    min-height: 0;
+    padding-right: 8px;
+}
+
+#second-row {
+    padding-top: 12px;
 }
 
 /*Give checkboxes a slightly larger size that normal.*/

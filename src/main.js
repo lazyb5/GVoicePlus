@@ -8,6 +8,7 @@ const path = require('path');
 const CSSInjector = require('./utils/cssInjector');
 const contrastGuard = require('./utils/contrastGuard');
 const topBar = require('./utils/topBar');
+const sideNav = require('./utils/sideNav');
 const unreadWatcher = require('./utils/unreadWatcher');
 const imagePaste = require('./utils/imagePaste');
 const themePalette = require('./utils/themePalette');
@@ -109,6 +110,23 @@ app.whenReady().then(() => {
     createWindow();
 });
 
+// Themes only style the signed-in Google Voice app (voice.google.com/u/<n>/...).  The start-up / sign-in pages
+// (the landing page, accounts.google.com) are left unthemed so they look normal.
+function themeForCurrentPage(theme) {
+    let url = '';
+    try { url = win.webContents.getURL(); } catch (e) { /* window gone */ }
+    const isApp = /^https:\/\/voice\.google\.com\/u\/\d+(\/|$)/.test(url);
+    console.log(`Page ${url} -> ${isApp ? `theme ${theme}` : 'unthemed'}`);
+    return isApp ? theme : 'default';
+}
+
+// The selected theme's background colour as "#rrggbb" (white for the default theme).  Used as the window's own
+// background so there is no white flash before the page and its theme have loaded.
+function themeBackground(theme) {
+    const pal = themePalette.get(appPath, theme);
+    return (pal && /^#[0-9a-f]{6}$/i.test(pal.bg)) ? pal.bg : '#ffffff';
+}
+
 // Creates and returns this application's main BrowserWindow, navigated to Google Voice.
 function createWindow() {
     // Create the window, making it hidden initially.  If we have
@@ -117,6 +135,7 @@ function createWindow() {
     win = new BrowserWindow({
         width: prefs.windowWidth || DEFAULT_WIDTH,
         height: prefs.windowHeight || DEFAULT_HEIGHT,
+        backgroundColor: themeBackground(process.env.GV_THEME || prefs.theme || constants.DEFAULT_SETTING_THEME),
         icon,
         show: false,
         webPreferences: {
@@ -212,14 +231,24 @@ function createWindow() {
     // Navigate the window to Google Voice.  When it finishes loading, modify Google's markup as needed
     // to support user customizations that we allow the user to make from within our application UI.
     loadGoogleVoice();
+
+    // Apply the theme as soon as the page's DOM exists (dom-ready), which is well before the page has finished
+    // loading, so the page is never seen unthemed.  GV_THEME=<name> npm start overrides the saved theme (handy for testing).
+    win.webContents.on('dom-ready', () => {
+        const theme = process.env.GV_THEME || store.get('prefs.theme') || constants.DEFAULT_SETTING_THEME;
+        cssInjector = new CSSInjector(app, win);
+        cssInjector.injectTheme(themeForCurrentPage(theme))
+            // The preload script already applied the theme before first paint; drop that copy now that this one is in.
+            .then(() => win.webContents.executeJavaScript("var e = document.getElementById('gv-early-theme'); if (e) { e.remove(); }"))
+            .catch(() => {});
+    });
+
     win.webContents.on('did-finish-load', () => {
-        // Re-apply the theme last selected by the user.  GV_THEME=<name> npm start overrides it (handy for testing).
         const theme = process.env.GV_THEME || store.get('prefs.theme') || constants.DEFAULT_SETTING_THEME;
         const hideDialerSidebar = store.get('prefs.hideDialerSidebar') || constants.DEFAULT_HIDE_DIALER_SIDEBAR;
-        cssInjector = new CSSInjector(app, win);
-        cssInjector.injectTheme(theme);
+        const pageTheme = themeForCurrentPage(theme);
         cssInjector.showHideDialerSidebar(hideDialerSidebar);
-        contrastGuard.start(win, theme);
+        contrastGuard.start(win, pageTheme);
         topBar.apply(win, hiddenTopBarItems());
         unreadWatcher.start(win);
         imagePaste.start(win);
@@ -452,11 +481,18 @@ function showSettingsWindow() {
             modal: true,
             resizable: false,
             minimizable: false,
+            show: false,   // shown once the page has applied its theme (see 'settings-ready'), so it never flashes white
+            backgroundColor: themeBackground(store.get('prefs.theme') || constants.DEFAULT_SETTING_THEME),
             webPreferences: {
                 nodeIntegration: true,
                 contextIsolation: false
             }});
         settingsWindow.removeMenu();
+
+        // Safety net: show the window anyway if the page never reports in.
+        const settingsShowTimer = setTimeout(() => {
+            if (settingsWindow && !settingsWindow.isDestroyed() && !settingsWindow.isVisible()) { settingsWindow.show(); }
+        }, 2000);
         
         // Stash the user's settings store on the window so that it can be accessed by the window's renderer process.
         settingsWindow.prefs = store.get('prefs') || {};
@@ -467,6 +503,7 @@ function showSettingsWindow() {
 
         // When the window gets closed, release its global reference.
         settingsWindow.on('close', function() {
+            clearTimeout(settingsShowTimer);
             settingsWindow = null;
         });
     }
@@ -526,13 +563,32 @@ ipcMain.handle('get-zoom-level', () => {
 // Settings Window Event Handlers
 // ====================================================================================================================
 
+// Asked (synchronously) by the main window's preload script at the start of every page load: returns the theme CSS
+// to apply before first paint, or null when the page should stay unthemed (start-up / sign-in pages, default theme).
+ipcMain.on('get-early-theme-css', (event, href) => {
+    let css = null;
+    try {
+        const theme = process.env.GV_THEME || store.get('prefs.theme') || constants.DEFAULT_SETTING_THEME;
+        if (theme !== 'default' && /^https:\/\/voice\.google\.com\/u\/\d+(\/|$)/.test(href || '')) {
+            css = CSSInjector.themeCss(app, theme);
+        }
+    } catch (e) { console.log(e); }
+    event.returnValue = css;
+});
+
+// Called by the Settings page once it has applied the theme colours; only then is the window shown.
+ipcMain.on('settings-ready', () => {
+    if (settingsWindow && !settingsWindow.isDestroyed() && !settingsWindow.isVisible()) { settingsWindow.show(); }
+});
+
 // Called when the theme has been changed.
 ipcMain.on('pref-change-theme', (event, theme) => {
     console.log(`Theme changed to: ${theme}`);
 
     // Apply the selected them and then save the selection to the user's settings store.
-    cssInjector.injectTheme(theme);
-    contrastGuard.start(win, theme);
+    const pageTheme = themeForCurrentPage(theme);
+    cssInjector.injectTheme(pageTheme);
+    contrastGuard.start(win, pageTheme);
     const prefs = store.get('prefs') || {};
     prefs.theme = theme;
     store.set('prefs', prefs);
@@ -545,7 +601,7 @@ ipcMain.on('pref-change-zoom', (event, zoomLevel) => {
     // Apply the newly selected zoom level.  Note that there is no need to save this setting to
     // the user's settings store.  Electron handles remembering our main window's zoom level by
     // default, so it will automatically be restored the next time the application is launched.
-    win.webContents.setZoomLevel(parseInt(zoomLevel));
+    win.webContents.setZoomLevel(parseFloat(zoomLevel));
 });
 
 // Called when the "show menu bar" checkbox has been checked/unchecked.
@@ -607,6 +663,28 @@ ipcMain.on('pref-change-exit-on-close', (e, exitOnClose) => {
     const prefs = store.get('prefs') || {};
     prefs.exitOnClose = exitOnClose;
     store.set('prefs', prefs);
+});
+
+// Asked (synchronously) by the preload script at the start of every page load, so that the sidebar is already collapsed
+// before the page first draws.
+ipcMain.on('get-collapse-side-nav', (event) => {
+    event.returnValue = { collapse: !!store.get('prefs.collapseSideNav'), hover: !!store.get('prefs.hoverSideNav') };
+});
+
+// Called when the "show sidebar on hover" checkbox has been checked/unchecked.
+ipcMain.on('pref-change-hover-side-nav', (e, hover) => {
+    const prefs = store.get('prefs') || {};
+    prefs.hoverSideNav = !!hover;
+    store.set('prefs', prefs);
+    sideNav.setHover(win, prefs.hoverSideNav);
+});
+
+// Called when the "collapse sidebar" checkbox has been checked/unchecked.  Collapses (or re-opens) it right away.
+ipcMain.on('pref-change-collapse-side-nav', (e, collapse) => {
+    const prefs = store.get('prefs') || {};
+    prefs.collapseSideNav = !!collapse;
+    store.set('prefs', prefs);
+    sideNav.setCollapsed(win, prefs.collapseSideNav);
 });
 
 // Called when the "hide dialer sidebar" checkbox has been checked/unchecked.

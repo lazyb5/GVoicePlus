@@ -1,7 +1,7 @@
 <html>
     <head>
         <link rel="stylesheet" href="customize.css">
-        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z" crossorigin="anonymous">
+        <link rel="stylesheet" href="vendor/bootstrap.min.css">
     </head>
     <body>
         <div class="dialog-grid">
@@ -41,10 +41,10 @@
 
                 <!--"Zoom" slider-->
                 <div class="form-group">
-                    <label class="font-weight-bold" style="margin-bottom: 0">Zoom % (25-500)</label>
+                    <label class="font-weight-bold" style="margin-bottom: 0" for="zoom">Zoom (%)</label>
                     <div class="form-row">
                         <div class="col">
-                            <input type="range" class="form-control" id="zoom" min="-8" max="9" step="1" />
+                            <input type="number" class="form-control" id="zoom" min="25" max="500" step="5" />
                         </div>
                         <div class="col-auto">
                             <button type="button" class="btn btn-secondary" id="reset-zoom">Reset</button>
@@ -80,12 +80,6 @@
                         <label class="form-check-label" for="exit-on-close">Exit application when main window is closed</label>
                     </div>
 
-                    <!-- Hide dialer sidebar -->
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" id="hide-dialer-sidebar">
-                        <label class="form-check-label" for="hide-dialer-sidebar">Hide dialer sidebar</label>
-                    </div>
-
                     <!-- Spell check -->
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="spellcheck">
@@ -95,17 +89,40 @@
                     <!-- Verification codes -->
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="copy-codes">
-                        <label class="form-check-label" for="copy-codes">Copy verification codes from new messages to the clipboard (cleared after 1 minute)</label>
+                        <label class="form-check-label" for="copy-codes">Copy verification codes</label>
+                        <small class="form-text">Copies codes from new messages to the clipboard, then clears it after 1 minute.</small>
                     </div>
+
                 </div>
 
-                <!-- Top bar -->
+                <!-- Top bar and sidebars -->
                 <div class="form-group">
-                    <label class="font-weight-bold">Top bar</label>
+                    <label class="font-weight-bold">Top bar and sidebars</label>
                     <div>
                         <button type="button" class="btn btn-secondary" id="customize-topbar">Choose which items to show...</button>
                     </div>
                     <small class="form-text">Closes this window. Then click items in the top bar to hide or show them.</small>
+
+                    <!-- Hide dialer sidebar -->
+                    <div class="form-check" style="margin-top: 12px">
+                        <input class="form-check-input" type="checkbox" id="hide-dialer-sidebar">
+                        <label class="form-check-label" for="hide-dialer-sidebar">Hide dialer sidebar</label>
+                    </div>
+
+                    <!-- Collapse sidebar -->
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="collapse-side-nav">
+                        <label class="form-check-label" for="collapse-side-nav">Collapse sidebar</label>
+                        <small class="form-text">Keeps the left navigation hidden at any window width. The hamburger button shows it over the page, as in a small window.</small>
+                    </div>
+
+                    <!-- Show sidebar on hover -->
+                    <div class="form-check" style="margin-left: 20px">
+                        <input class="form-check-input" type="checkbox" id="hover-side-nav">
+                        <label class="form-check-label" for="hover-side-nav">Show it when hovering</label>
+                        <small class="form-text">Opens it when the mouse touches the hamburger button or the left edge of the page, and hides it when the mouse moves away.</small>
+                    </div>
+                </div>
             </div>
 
             <!--Place window buttons in this div.-->
