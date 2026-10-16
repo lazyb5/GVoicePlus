@@ -12,6 +12,7 @@ const sideNav = require('./utils/sideNav');
 const unreadWatcher = require('./utils/unreadWatcher');
 const imagePaste = require('./utils/imagePaste');
 const themePalette = require('./utils/themePalette');
+const accountMenuTheme = require('./utils/accountMenuTheme');
 const Store = require('./utils/prefsStore');   // tiny replacement for electron-store (same config.json)
 const Url = require('url');
 
@@ -259,6 +260,14 @@ function createWindow() {
         topBar.apply(win, hiddenTopBarItems());
         unreadWatcher.start(win);
         imagePaste.start(win);
+    });
+
+    // The profile-picture dropdown is a separate embedded page, so it is themed on its own (accountMenuTheme.js).  It loads
+    // after the main page and may reload later, so every sub-frame that finishes loading triggers this.
+    win.webContents.on('did-frame-finish-load', (event, isMainFrame) => {
+        if (isMainFrame) { return; }
+        const theme = process.env.GV_THEME || store.get('prefs.theme') || constants.DEFAULT_SETTING_THEME;
+        accountMenuTheme.apply(win, themePalette.get(appPath, theme));
     });
 
     // Create our system notification area icon.
@@ -596,6 +605,7 @@ ipcMain.on('pref-change-theme', (event, theme) => {
     const pageTheme = themeForCurrentPage(theme);
     cssInjector.injectTheme(pageTheme);
     contrastGuard.start(win, pageTheme);
+    accountMenuTheme.apply(win, themePalette.get(appPath, theme));
     const prefs = store.get('prefs') || {};
     prefs.theme = theme;
     store.set('prefs', prefs);
