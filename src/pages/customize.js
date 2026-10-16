@@ -151,6 +151,13 @@
         ipcRenderer.send('pref-change-copy-codes', e.target.checked);
     });
 
+    // Set the "tell me about updates" checkbox (on by default).
+    const checkUpdates = document.getElementById('check-updates');
+    checkUpdates.checked = prefs.checkForUpdates !== false;
+    checkUpdates.addEventListener('change', (e) => {
+        ipcRenderer.send('pref-change-check-updates', e.target.checked);
+    });
+
     // "Choose which items to show": closes this window and lets the user click items in the main window's top bar.
     document.getElementById('customize-topbar').addEventListener('click', () => {
         ipcRenderer.send('topbar-edit');
