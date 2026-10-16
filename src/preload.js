@@ -38,7 +38,18 @@
         const navPrefs = ipcRenderer.sendSync('get-collapse-side-nav') || {};
         window.__gvForceNarrow = !!navPrefs.collapse;
         window.__gvHoverNav = !!navPrefs.hover;
-        window.__gvSetForceNarrow = (on) => { window.__gvForceNarrow = !!on; refreshers.forEach((f) => f()); };
+
+        // While collapsed, Google's floating sidebar panel is 360px wide but its menu is only 240px, so 120px of empty panel
+        // sticks out over the page.  Trim the panel to the menu's width.
+        const navStyle = document.createElement('style');
+        const syncNavStyle = () => { navStyle.textContent = window.__gvForceNarrow ? 'mat-sidenav.mat-drawer { width: 240px !important; }' : ''; };
+        const attachNavStyle = () => { if (!navStyle.isConnected) { const host = document.documentElement || document.head; if (host) { host.appendChild(navStyle); } } };
+        syncNavStyle();
+        attachNavStyle();
+        document.addEventListener('readystatechange', attachNavStyle);
+        document.addEventListener('DOMContentLoaded', attachNavStyle);
+
+        window.__gvSetForceNarrow = (on) => { window.__gvForceNarrow = !!on; syncNavStyle(); refreshers.forEach((f) => f()); };
 
         window.matchMedia = (query) => {
             const real = original(query);
