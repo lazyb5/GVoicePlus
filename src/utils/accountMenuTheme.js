@@ -18,14 +18,29 @@ function frameMain(P) {
     if (!P) { return 'removed'; }
 
     const parse = (s) => {
+        const named = { white: [255, 255, 255], black: [0, 0, 0] };   // some themes write their colours as plain words
+        if (named[String(s).trim().toLowerCase()]) { return named[String(s).trim().toLowerCase()]; }
         const hex = /#([0-9a-f]{6})/i.exec(s || '');
         if (hex) { return [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16)); }
         const rgb = /rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(s || '');
         return rgb ? [+rgb[1], +rgb[2], +rgb[3]] : [128, 128, 128];
     };
-    const base = parse(P.surface || P.bg), fg = parse(P.fg), sub = parse(P.subtext || P.fg);
+    const fg = parse(P.fg);
     const dark = P.scheme === 'dark';
-    const mix = (t) => 'rgb(' + base.map((v, i) => Math.round(v * (1 - t) + fg[i] * t)).join(',') + ')';
+    // WCAG contrast between two colours (4.5 or more is comfortable for text).
+    const lum = (c) => { const [r, g, b] = c.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const blend = (from, to, t) => from.map((v, i) => v * (1 - t) + to[i] * t);
+    // The menu's base colour: the theme's surface colour if the text reads well on it (including on the lighter hover
+    // shade), otherwise one of its background colours.  Some themes' "surface" is a mid-grey that their text can't be read on.
+    const candidates = [P.surface, P.bg, P.backdrop].filter(Boolean).map(parse);
+    const base = candidates.find((c) => ratio(fg, blend(c, fg, 0.14)) >= 4.5) || parse(P.bg);
+    // Secondary text: the theme's own colour if it is readable on the row colour, otherwise nudged toward the main text colour.
+    const subWanted = parse(P.subtext || P.fg);
+    let sub = subWanted;
+    for (let t = 0.1; ratio(sub, blend(base, fg, 0.14)) < 4.5 && t <= 1; t += 0.1) { sub = blend(subWanted, fg, t); }
+    sub = sub.map(Math.round);
+    const mix = (t) => 'rgb(' + blend(base, fg, t).map(Math.round).join(',') + ')';
 
     const style = document.createElement('style');
     style.id = 'gv-account-theme';
