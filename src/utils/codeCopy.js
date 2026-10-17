@@ -18,7 +18,15 @@ const YEAR_WORDS = /\b(?:code|otp|passcode|pin)\b/ig;
 // 4-8 digits, or 3+3 digits split by a space or hyphen ("123 456").  Not part of a longer number, phone number,
 // amount, date, time, percentage or order number, and not stuck to letters ("KB5034441").  "G-123456" is fine
 // (a letter, then a hyphen).
-const CANDIDATE = /(?<![\d$€£#.,:/+A-Za-z])(?<!\d-)(\d{3}[ -]\d{3}|\d{4,8})(?!\d|[A-Za-z]|[ -]\d|[.,:/]\d|%)/g;
+// Also not the tail of a longer digit group ("555 123 4567", "ID 123 456 789").
+const CANDIDATE = /(?<![\d$€£#.,:/+A-Za-z])(?<!\d[ -])(\d{3}[ -]\d{3}|\d{4,8})(?!\d|[A-Za-z]|[ -]\d|[.,:/]\d|%)/g;
+
+// Numbers that sit next to a "keyword" but are really something else: "account ending 4821", "2500 USD",
+// "12345 Oak Ave", "Happy 2026!".  Checked against the text just before / after the candidate.
+const NOT_CODE_BEFORE = /\b(?:ending(?:\s+in)?|ends?\s+in|acct|ref(?:erence)?|order|invoice|confirmation|tracking|apt|suite|unit)\s*[:#.]?\s*$/i;
+const NOT_CODE_AFTER = /^\s*(?:usd|eur|gbp|dollars?|euros?|bucks)\b|^\s+(?:\w+\s+)?(?:st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane|ct|court|way|pkwy|hwy|highway)\b|^!/i;
+const NOT_YEAR_BEFORE = /\b(?:happy|year|since|copyright|in|of)\s*$/i;
+const FOUR_DIGIT_MAX_DISTANCE = 30;   // short codes need their keyword closer; the usual wording is "code is 1234"
 
 function positions(re, text) {
     const out = [];
@@ -41,11 +49,15 @@ function extractCode(body) {
     for (const m of text.matchAll(CANDIDATE)) {
         const digits = m[1].replace(/\D/g, '');
         const at = m.index;
+        const before = text.slice(Math.max(0, at - 24), at);
+        const after = text.slice(at + m[1].length, at + m[1].length + 24);
         const looksLikeYear = digits.length === 4 && /^(19|20)\d\d$/.test(digits);
+        if (NOT_CODE_BEFORE.test(before) || NOT_CODE_AFTER.test(after)) { continue; }
+        if (looksLikeYear && NOT_YEAR_BEFORE.test(before)) { continue; }
         const distance = looksLikeYear
             ? nearest(yearWords, at)
             : Math.min(nearest(strong, at), digits.length >= 6 ? nearest(weak, at) : Infinity);   // "sign in" alone only counts for 6+ digits
-        if (distance > 60) { continue; }
+        if (distance > (digits.length === 4 && !looksLikeYear ? FOUR_DIGIT_MAX_DISTANCE : 60)) { continue; }
         if (!best || distance < best.distance) { best = { digits, distance }; }
     }
     return best ? best.digits : null;

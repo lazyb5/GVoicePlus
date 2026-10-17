@@ -37,6 +37,7 @@
   },
   "scripts": {
     "start": "electron .",
+    "test": "node --test \"test/*.test.js\"",
     "postinstall": "electron-builder install-app-deps && node scripts/brand-dev-electron.js",
     "build:windows": "electron-builder --windows",
     "build:mac": "electron-builder --mac",

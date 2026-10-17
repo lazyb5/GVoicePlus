@@ -253,7 +253,9 @@ module.exports.init = function ({ getWindow, onMessage }) {
         n.on('close', () => { shown.delete(id); });
         n.show();
         console.log(`${ts()} [notify] shown id=${id}`);
-        if (copiedCode) { markReadInBackground(title, body); }
+        // Only for 6+ digit codes: short codes are the likeliest false matches, and marking a real message read is worse
+        // than a stray number on the clipboard.
+        if (copiedCode && copiedCode.length >= 6) { markReadInBackground(title, body); }
     });
 
     ipcMain.on('gv-notify-close', (_e, id) => {
