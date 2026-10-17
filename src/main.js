@@ -28,8 +28,11 @@ const updates = require('./utils/updateCheck').init({
 const appPath = app.getAppPath();
 const REFRESH_RATE = 60000; // 60 seconds: only a safety net now; unread changes arrive instantly from the page (unreadWatcher)
 const icon = path.join(appPath, 'images', constants.APPLICATION_ICON_MEDIUM);
-const iconTray = path.join(appPath, 'images', constants.APPLICATION_ICON_SMALL);
-const iconTrayDirty = path.join(appPath, 'images', constants.APPLICATION_ICON_SMALL_WITH_INDICATOR);
+// On macOS the menu bar icon is a monochrome "template" image (the "Template" suffix tells Electron), which macOS draws
+// white or black to match the menu bar, like other Mac apps.  A template can't be coloured, so the unread state is a
+// dot instead of the red block the colour icon uses.  Windows and Linux keep the colour icons.
+const iconTray = path.join(appPath, 'images', process.platform === 'darwin' ? 'trayTemplate.png' : constants.APPLICATION_ICON_SMALL);
+const iconTrayDirty = path.join(appPath, 'images', process.platform === 'darwin' ? 'trayDirtyTemplate.png' : constants.APPLICATION_ICON_SMALL_WITH_INDICATOR);
 const dockIcon = nativeImage.createFromPath(path.join(appPath, 'images', constants.APPLICATION_ICON_LARGE));
 
 // Developer aid: `GV_DEBUG_PORT=9222 npm start` exposes Chromium's debugging port on localhost only, so the page
