@@ -1,10 +1,11 @@
 
 /* Color Palette */
 $background: white;
-$foreground: #495057;
+$foreground: #3b4147;                 // was #495057: too faint once dimmed on the selected row
 $primary: #2fa4e7;
+$on-primary: #1a1a1a;                 // text in sent bubbles; white on this blue was ~2.8:1
 $secondary: #73a839;
-$selection: rgba(73, 80, 87, 0.6);
+$selection: rgba(73, 80, 87, 0.14);   // was 0.6: grey text on a mid-grey row/bubble was ~2.7:1
 
 @use 'base';
 

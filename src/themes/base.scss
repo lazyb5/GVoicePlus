@@ -106,9 +106,12 @@
     color: $foreground;
 }
 
+/* Light themes may define a gentler $detail-opacity so their text colour stays tinted. */
+$detail-opacity: .8 !default;
+
 %list-item-detail {
     color: $foreground;
-    opacity: .6;
+    opacity: $detail-opacity;
 }
 
 /* Dial pad */

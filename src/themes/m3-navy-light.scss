@@ -11,10 +11,12 @@ $primary: #2b63ba;                      // accent (buttons, sent bubbles)
 $primary-strong: #214c91;               // accent, pressed
 $on-primary: #ffffff;                   // text/icons on the accent
 $primary-container: #b5c9e8;            // tinted container for active/selected states
-$on-primary-container: #1a1a1a;         // text/icons on that container
+$on-primary-container: #1e4685;         // text/icons on that container
 $secondary: #5985c9;                    // highlight
 $outline: rgba(33, 76, 145, 0.12);      // dividers
 $color-scheme: light;                   // for native controls and scrollbars
+$on-selection: #1e4685;                 // text on selected rows, incoming bubbles and the message box
+$detail-opacity: 0.9;                   // secondary text dimming (dark themes use 0.8)
 
 @use 'base';
 @use 'm3';

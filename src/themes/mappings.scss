@@ -179,6 +179,30 @@ gv-dialpad-toggle button {
     @extend %dial-pad-toggle;
 }
 
+/* The call sidebar (dialer) in Google Voice's current markup: its panel, search box, suggestions, keys and "Hide keypad"
+   were all left in Google's white and grey. */
+gv-call-sidebar .root {
+    @extend %list;
+}
+
+gv-call-sidebar input.input {
+    background-color: transparent;
+}
+
+gv-call-sidebar .root,
+gv-call-sidebar input.input,
+gv-call-sidebar input.input::placeholder,
+gv-call-sidebar h3.group-title,
+gv-call-sidebar .phone-number,
+gv-call-sidebar .phone-type,
+gv-call-sidebar .bullet,
+gv-dialpad *,
+gv-dialpad-toggle mat-icon,
+gv-dialpad-toggle span {
+    @extend %conversation-title;   /* colour only.  Not %list-item-heading: extending it with a ::placeholder selector builds invalid
+                                      selectors ("x::placeholder input"), and one invalid selector makes the browser drop the whole rule */
+}
+
 
 
 
@@ -208,14 +232,25 @@ gv-thread-list-item .container.active {
 }
 
 gv-thread-list-item .title,
-gv-thread-list-item gv-annotation.participants {
+gv-thread-list-item gv-annotation.participants,
+.threads-header .threads-button,   /* the "Send new message" row: its text and icon were left in Google's grey */
+.threads-header .threads-button * {
     @extend %list-item-heading;
 }
 
 gv-thread-list-item gv-annotation.preview,
 gv-thread-list-item .subtitle,
+gv-thread-list-item .subtitle gv-annotation,
+gv-thread-list-item .subtitle .timestamp,
+gv-thread-list-item .subtitle .duration,
 gv-thread-list-item .timestamp {
     @extend %list-item-detail;
+}
+
+/* Opacity multiplies down the tree: .subtitle dimmed AND its text children dimmed gave ~0.64 (previews ~0.36).  Dim the text
+   once, on the text itself, and leave .subtitle (which also holds Google's coloured call-direction icons) undimmed. */
+gv-thread-list-item .subtitle {
+    opacity: 1;
 }
 
 /* Conversation header */
@@ -247,6 +282,11 @@ gv-message-item .message-row.outgoing .bubble {
 
 gv-message-item .bubble gv-annotation {
     color: inherit;
+}
+
+/* The default contact avatar is a mid-grey disc that Google paints itself; white is the only icon colour that reads on it. */
+gv-message-item .avatar mat-icon {
+    color: #ffffff;
 }
 
 gv-message-item mat-icon,

@@ -31,6 +31,16 @@ gv-thread-details {
     overflow: hidden;
 }
 
+/* The call sidebar (dialer, in-call screen) is a floating panel too, like the thread list and conversation. */
+gv-call-sidebar > div.root {
+    box-sizing: border-box;
+    background-color: $background;
+    background-clip: padding-box;
+    border: 6px solid $backdrop;
+    border-radius: 28px;
+    overflow: hidden;
+}
+
 /* Inside the list panel everything is just the panel colour */
 gv-thread-list {
     background-color: transparent;
@@ -108,8 +118,25 @@ gv-thread-list-item .container.active {
     background-color: $primary-container;
 }
 
+/* A hovered row takes the darker "selection" tint (shared mappings), so its text needs the deeper shade too.  Declared
+   before the .active rule so a selected row keeps its own colour. */
+$on-selection: $foreground !default;
+
+gv-thread-list-item .container:hover .title,
+gv-thread-list-item .container:hover gv-annotation.participants,
+gv-thread-list-item .container:hover .subtitle gv-annotation,
+gv-thread-list-item .container:hover .subtitle .timestamp,
+gv-thread-list-item .container:hover .subtitle .duration,
+gv-thread-list-item .container:hover .timestamp {
+    color: $on-selection;
+}
+
 gv-thread-list-item .container.active .title,
-gv-thread-list-item .container.active gv-annotation.participants {
+gv-thread-list-item .container.active gv-annotation.participants,
+gv-thread-list-item .container.active .subtitle gv-annotation,
+gv-thread-list-item .container.active .subtitle .timestamp,
+gv-thread-list-item .container.active .subtitle .duration,
+gv-thread-list-item .container.active .timestamp {
     color: $on-primary-container;
 }
 
@@ -118,11 +145,24 @@ gv-message-item .bubble {
     border-radius: 20px;
 }
 
+/* Incoming bubbles sit on the darker "selection" tint, so their text uses the deeper shade (light themes; dark themes
+   leave $on-selection equal to $foreground). */
+gv-message-item .message-row:not(.outgoing) .bubble {
+    color: $on-selection;
+}
+
 /* ---- Message box: a tonal pill ---- */
 gv-message-entry textarea {
     background-color: $container-high;
     border-radius: 9999px;
     padding-left: 16px;
+}
+
+/* The shared base paints this box with the selection tint, which needs the deeper text shade.  The longer selector is so
+   it wins over the base rule's own specificity. */
+gv-message-entry .message-input-container textarea.message-input,
+gv-message-entry .message-input-container textarea.message-input::placeholder {
+    color: $on-selection;
 }
 
 /* ---- Cards on the "nothing selected" screens ---- */

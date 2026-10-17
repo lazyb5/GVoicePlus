@@ -1,10 +1,12 @@
 
 /* Color Palette */
 $background: white;
-$foreground: #5a5a5a;
+$foreground: #404040;                 // was #5a5a5a: too faint once dimmed on the grey selection
 $primary: #78c2ad;
 $secondary: #6cc3d5;
 $selection: rgba(0, 0, 0, 0.075);
+$on-primary: #1a1a1a;                 // text on the mint accent (sent bubbles); white on mint was ~2:1
+$on-mint: #1a1a1a;                    // text/icons on the mint top bar
 
 @use 'base';
 
@@ -19,7 +21,7 @@ $selection: rgba(0, 0, 0, 0.075);
 %navbar svg,
 %navbar input::placeholder,
 %navbar-search svg {
-    color: $background;
+    color: $on-mint;
 }
 
 %navbar input::placeholder {
@@ -28,5 +30,5 @@ $selection: rgba(0, 0, 0, 0.075);
 
 %conversation-message-recieved,
 %conversation-message-sent {
-    color: $background;
+    color: $on-mint;
 }
