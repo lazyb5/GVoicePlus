@@ -6,7 +6,6 @@ const contextMenu = require('electron-context-menu');
 const BadgeGenerator = require('./badge_generator');
 const path = require('path');
 const CSSInjector = require('./utils/cssInjector');
-const contrastGuard = require('./utils/contrastGuard');
 const topBar = require('./utils/topBar');
 const sideNav = require('./utils/sideNav');
 const unreadWatcher = require('./utils/unreadWatcher');
@@ -252,11 +251,8 @@ function createWindow() {
     });
 
     win.webContents.on('did-finish-load', () => {
-        const theme = process.env.GV_THEME || store.get('prefs.theme') || constants.DEFAULT_SETTING_THEME;
         const hideDialerSidebar = store.get('prefs.hideDialerSidebar') || constants.DEFAULT_HIDE_DIALER_SIDEBAR;
-        const pageTheme = themeForCurrentPage(theme);
         cssInjector.showHideDialerSidebar(hideDialerSidebar);
-        contrastGuard.start(win, pageTheme);
         topBar.apply(win, hiddenTopBarItems());
         unreadWatcher.start(win);
         imagePaste.start(win);
@@ -480,6 +476,10 @@ function createTray(iconPath, tipText) {
 }
 
 // Displays this application's main window to the user.
+function showMainWindow() {
+    win && win.show();
+}
+
 // When the Settings window closes, the main window gets keyboard focus back, and it can land on a button such as the profile
 // picture, which makes Google draw its focus ring and show its tooltip for no visible reason.  Let go of a focused button or
 // link (in the page and in the frames Google embeds in it), but never of a text box, so a draft is left exactly as it is.
@@ -497,10 +497,6 @@ function releaseButtonFocus() {
             frame.executeJavaScript(script).catch(() => { /* frame went away */ });
         }
     } catch (e) { console.log('Releasing focus failed:', e.message); }
-}
-
-function showMainWindow() {
-    win && win.show();
 }
 
 // Creates (if it doesn't already exist) this application's "Settings" window, and then displays it to the user.
@@ -536,11 +532,11 @@ function showSettingsWindow() {
         settingsWindow.loadFile(path.join(appPath, 'src', 'pages', 'customize.html'));
         //settingsWindow.webContents.openDevTools();
 
-            setTimeout(releaseButtonFocus, 250);   // once the main window has taken keyboard focus back
         // When the window gets closed, release its global reference.
         settingsWindow.on('close', function() {
             clearTimeout(settingsShowTimer);
             settingsWindow = null;
+            setTimeout(releaseButtonFocus, 250);   // once the main window has taken keyboard focus back
         });
     }
     else {
@@ -624,7 +620,6 @@ ipcMain.on('pref-change-theme', (event, theme) => {
     // Apply the selected them and then save the selection to the user's settings store.
     const pageTheme = themeForCurrentPage(theme);
     cssInjector.injectTheme(pageTheme);
-    contrastGuard.start(win, pageTheme);
     accountMenuTheme.apply(win, themePalette.get(appPath, theme));
     const prefs = store.get('prefs') || {};
     prefs.theme = theme;
