@@ -55,6 +55,8 @@ function frameMain(P) {
         '[data-gv-fg="main"] { color: rgb(' + fg.join(',') + ') !important; }',
         '[data-gv-fg="sub"] { color: rgb(' + sub.join(',') + ') !important; }',
         'svg path { fill: rgb(' + fg.join(',') + ') !important; }',
+        // Material icons often carry an invisible full-size square (fill="none") behind the glyph; filling it hides the icon as a box.
+        'svg path[fill="none"], svg rect[fill="none"] { fill: none !important; }',
         dark ? '[data-gv-small] { filter: invert(1) hue-rotate(180deg); }' : ''
     ].join('\n');
     (document.head || document.documentElement).appendChild(style);
@@ -106,12 +108,12 @@ function buildScript(palette) {
     return '(' + frameMain.toString() + ')(' + JSON.stringify(palette || null) + ')';
 }
 
-// Applies (or, with a null palette, removes) the theme in every profile-menu page of the main window.  Only dark themes
-// are applied: Google's menu is already light, which fits the light themes as it is.
+// Applies (or, with a null palette, removes) the theme in every profile-menu page of the main window.  Light themes get it
+// too: Google's own light menu is a neutral white/grey that doesn't match their tinted surfaces.
 function apply(win, palette) {
     try {
         if (!win || win.isDestroyed()) { return; }
-        const script = buildScript(palette && palette.scheme === 'dark' ? palette : null);
+        const script = buildScript(palette || null);
         for (const frame of win.webContents.mainFrame.framesInSubtree) {
             if (/^https:\/\/ogs\.google\.com\/u\/\d+\/widget\/account/.test(frame.url)) {
                 frame.executeJavaScript(script).catch(() => { /* frame went away */ });
