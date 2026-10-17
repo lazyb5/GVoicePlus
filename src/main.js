@@ -480,6 +480,25 @@ function createTray(iconPath, tipText) {
 }
 
 // Displays this application's main window to the user.
+// When the Settings window closes, the main window gets keyboard focus back, and it can land on a button such as the profile
+// picture, which makes Google draw its focus ring and show its tooltip for no visible reason.  Let go of a focused button or
+// link (in the page and in the frames Google embeds in it), but never of a text box, so a draft is left exactly as it is.
+function releaseButtonFocus() {
+    try {
+        if (!win || win.isDestroyed()) { return; }
+        const script = `(function () {
+            var a = document.activeElement;
+            if (!a || a === document.body || a === document.documentElement || a.tagName === 'IFRAME') { return 'none'; }
+            if (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.getAttribute('role') === 'textbox') { return 'kept'; }
+            a.blur();
+            return 'released';
+        })()`;
+        for (const frame of win.webContents.mainFrame.framesInSubtree) {
+            frame.executeJavaScript(script).catch(() => { /* frame went away */ });
+        }
+    } catch (e) { console.log('Releasing focus failed:', e.message); }
+}
+
 function showMainWindow() {
     win && win.show();
 }
@@ -517,6 +536,7 @@ function showSettingsWindow() {
         settingsWindow.loadFile(path.join(appPath, 'src', 'pages', 'customize.html'));
         //settingsWindow.webContents.openDevTools();
 
+            setTimeout(releaseButtonFocus, 250);   // once the main window has taken keyboard focus back
         // When the window gets closed, release its global reference.
         settingsWindow.on('close', function() {
             clearTimeout(settingsShowTimer);
