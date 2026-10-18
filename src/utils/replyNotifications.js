@@ -52,7 +52,14 @@ async function pageReply(name, text, SEL, dryRun, body) {
     const targetActive = () => { const r = targetRow(); return !!r && !!r.querySelector(SEL.activeRow) && !!document.querySelector(SEL.header); };
     const waitFor = async (fn, tries, ms) => { for (let i = 0; i < tries; i++) { const v = fn(); if (v) { return v; } await sleep(ms); } return fn(); };
 
+    // Google Voice's website drops unsent text when you change threads, so never leave a thread that has some typed in it.
+    const openDraft = () => {
+        const b = document.querySelector(SEL.input);
+        return !!b && !!((b.isContentEditable ? b.innerText : b.value) || '').trim();
+    };
+
     if (!targetActive()) {
+        if (openDraft()) { return 'draft-present'; }
         let row = targetRow();
         // Thread not in the list being shown: that is usually because another tab is open (Calls, Voicemail, Spam...),
         // and those tabs have rows too, so "no rows at all" is not a good test.  Go to Messages unless already there.
@@ -61,6 +68,7 @@ async function pageReply(name, text, SEL, dryRun, body) {
             if (nav) { nav.click(); row = await waitFor(targetRow, 20, 150); }
         }
         if (!row) { return 'thread-not-found'; }
+        if (openDraft()) { return 'draft-present'; }   // typed while we waited for the list
         (row.querySelector(SEL.rowClick) || row).click();
         if (!(await waitFor(targetActive, 25, 120))) { return 'thread-mismatch'; }
     }
@@ -242,9 +250,12 @@ module.exports.init = function ({ getWindow, onMessage }) {
                 }
                 console.log(`${ts()} [reply] result=${result} after ${Date.now() - t0} ms (queued ${t0 - queuedAt} ms)`);
                 if (result !== 'ok') {
+                    // 'draft-present' is the log code; the person sees plain words.
                     const heading = result === 'send-unconfirmed'
                         ? `Reply to ${title} not confirmed - check the thread`
-                        : `Reply to ${title} not sent (${result})`;
+                        : result === 'draft-present'
+                            ? `Reply to ${title} not sent - you have unsent text in another conversation`
+                            : `Reply to ${title} not sent (${result})`;
                     new Notification({ title: heading, body: text }).show();
                 }
             }).catch((e) => console.log(`${ts()} [reply] unexpected error: ${e && e.message}`));
