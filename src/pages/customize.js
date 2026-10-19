@@ -144,6 +144,18 @@
         ipcRenderer.send('pref-change-spellcheck', e.target.checked);
     });
 
+    // "App icon": a dropdown of the icon sets, shown only when there is a choice to make.  Applies immediately.
+    try {
+        const { sets, current } = await ipcRenderer.invoke('get-icon-sets');
+        if (sets.length > 1) {
+            const iconPicker = document.getElementById('app-icon');
+            sets.forEach((s) => iconPicker.add(new Option(s.label, s.id)));
+            iconPicker.value = current;
+            iconPicker.addEventListener('change', (e) => ipcRenderer.send('pref-change-app-icon', e.target.value));
+            document.getElementById('app-icon-group').style.display = '';
+        }
+    } catch (e) { /* older main process: no icon choice */ }
+
     // Set the "copy verification codes" checkbox (off by default); it takes effect immediately.
     const copyCodes = document.getElementById('copy-codes');
     copyCodes.checked = !!prefs.copyCodes;

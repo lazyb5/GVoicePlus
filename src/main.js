@@ -27,13 +27,27 @@ const updates = require('./utils/updateCheck').init({
 });
 const appPath = app.getAppPath();
 const REFRESH_RATE = 60000; // 60 seconds: only a safety net now; unread changes arrive instantly from the page (unreadWatcher)
-const icon = path.join(appPath, 'images', constants.APPLICATION_ICON_MEDIUM);
-// On macOS the menu bar icon is a monochrome "template" image (the "Template" suffix tells Electron), which macOS draws
-// white or black to match the menu bar, like other Mac apps.  A template can't be coloured, so the unread state is a
-// dot instead of the red block the colour icon uses.  Windows and Linux keep the colour icons.
-const iconTray = path.join(appPath, 'images', process.platform === 'darwin' ? 'trayTemplate.png' : constants.APPLICATION_ICON_SMALL);
-const iconTrayDirty = path.join(appPath, 'images', process.platform === 'darwin' ? 'trayDirtyTemplate.png' : constants.APPLICATION_ICON_SMALL_WITH_INDICATOR);
-const dockIcon = nativeImage.createFromPath(path.join(appPath, 'images', constants.APPLICATION_ICON_LARGE));
+// The app icon is the one chosen in Settings ("App icon", prefs.appIcon); iconSets.js lists the files for each choice.
+// These are replaced by applyIconSet() when the choice changes.
+const iconSets = require('./utils/iconSets');
+const imageFile = (file) => path.join(appPath, 'images', file);
+let iconSet = iconSets.get(store.get('prefs.appIcon'));
+let icon = imageFile(iconSet.window);
+let iconTray = imageFile(iconSet.tray);
+let iconTrayDirty = imageFile(iconSet.trayDirty);
+let dockIcon = nativeImage.createFromPath(imageFile(iconSet.dock));
+
+// Switches every place the app icon appears to the chosen set, right away.
+function applyIconSet(id) {
+    iconSet = iconSets.get(id);
+    icon = imageFile(iconSet.window);
+    iconTray = imageFile(iconSet.tray);
+    iconTrayDirty = imageFile(iconSet.trayDirty);
+    dockIcon = nativeImage.createFromPath(imageFile(iconSet.dock));
+    app.dock && app.dock.setIcon(dockIcon);
+    tray && tray.setImage(lastNotification > 0 ? iconTrayDirty : iconTray);
+    if (process.platform !== 'darwin' && win && !win.isDestroyed()) { win.setIcon(icon); }   // macOS windows have no icon
+}
 
 // Developer aid: `GV_DEBUG_PORT=9222 npm start` exposes Chromium's debugging port on localhost only, so the page
 // can be inspected from tools.  Does nothing unless that variable is set.
@@ -688,6 +702,18 @@ ipcMain.on('pref-change-copy-codes', (e, enabled) => {
     const prefs = store.get('prefs') || {};
     prefs.copyCodes = !!enabled;
     store.set('prefs', prefs);
+});
+
+// The icon choices for the Settings dropdown, and the one in use.
+ipcMain.handle('get-icon-sets', () => ({ sets: iconSets.list(), current: iconSet.id }));
+
+// Called when a different "App icon" is picked.  Applies at once and is remembered for next time.
+ipcMain.on('pref-change-app-icon', (e, id) => {
+    if (!iconSets.has(id)) { return; }
+    const prefs = store.get('prefs') || {};
+    prefs.appIcon = id;
+    store.set('prefs', prefs);
+    applyIconSet(id);
 });
 
 // Called when the "check for updates" checkbox has been checked/unchecked.
