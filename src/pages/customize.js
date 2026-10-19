@@ -144,14 +144,29 @@
         ipcRenderer.send('pref-change-spellcheck', e.target.checked);
     });
 
-    // "App icon": a dropdown of the icon sets, shown only when there is a choice to make.  Applies immediately.
+    // "App icon": the built-in icons, "Your image" once a picture has been chosen, and "Choose your own image...".
+    // Applies immediately.
     try {
-        const { sets, current } = await ipcRenderer.invoke('get-icon-sets');
+        const { sets, current, hasCustom } = await ipcRenderer.invoke('get-icon-sets');
         if (sets.length > 1) {
             const iconPicker = document.getElementById('app-icon');
+            const chooseOption = new Option('Choose your own image\u2026', '__choose__');
             sets.forEach((s) => iconPicker.add(new Option(s.label, s.id)));
+            iconPicker.add(chooseOption);
+            const showCustomOption = () => {
+                if (!iconPicker.querySelector('option[value="custom"]')) { iconPicker.add(new Option('Your image', 'custom'), chooseOption); }
+            };
+            if (hasCustom) { showCustomOption(); }
             iconPicker.value = current;
-            iconPicker.addEventListener('change', (e) => ipcRenderer.send('pref-change-app-icon', e.target.value));
+            let lastChoice = iconPicker.value;
+            iconPicker.addEventListener('change', async (e) => {
+                const value = e.target.value;
+                if (value !== '__choose__') { lastChoice = value; ipcRenderer.send('pref-change-app-icon', value); return; }
+                const result = await ipcRenderer.invoke('pick-custom-icon');
+                if (result === 'ok') { showCustomOption(); iconPicker.value = 'custom'; lastChoice = 'custom'; return; }
+                iconPicker.value = lastChoice;   // cancelled or unusable: keep what was chosen before
+                if (result === 'not-an-image') { window.alert('That file could not be used as an icon. Try a PNG or JPG, or an icon file (.icns on a Mac, .ico on Windows).'); }
+            });
             document.getElementById('app-icon-group').style.display = '';
         }
     } catch (e) { /* older main process: no icon choice */ }

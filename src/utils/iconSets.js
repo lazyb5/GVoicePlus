@@ -7,22 +7,36 @@
  * block the colour icon uses.  Windows and Linux use the colour icons.
  *
  * To add an icon: put its image files in the images folder and add one entry to SETS.  The Settings dropdown only shows
- * while there are two or more sets.
+ * while there are two or more sets.  (A person's own picture is handled separately, see customIcon.js.)
  **********************************************************************************************************************/
 
-const constants = require('../constants');
-
-const DEFAULT = 'classic';
+const DEFAULT = 'ocean';
 const mac = process.platform === 'darwin';
 
+// The speech-bubble icons are colourways of one design.  On a Mac they share one menu bar icon (a single-colour
+// "template", so macOS draws it white or black); Windows and Linux use the coloured tray icons.
+const bubble = (label, dir) => ({
+    label,
+    dock: `icons/${dir}/dock.png`,
+    window: `icons/${dir}/window.png`,
+    tray: mac ? 'icons/menubar/trayTemplate.png' : `icons/${dir}/tray.png`,
+    trayDirty: mac ? 'icons/menubar/trayDirtyTemplate.png' : `icons/${dir}/trayDirty.png`
+});
+
 const SETS = {
-    classic: {
-        label: 'Classic (Google Voice)',
-        dock: constants.APPLICATION_ICON_LARGE,
-        window: constants.APPLICATION_ICON_MEDIUM,
-        tray: mac ? 'trayTemplate.png' : constants.APPLICATION_ICON_SMALL,
-        trayDirty: mac ? 'trayDirtyTemplate.png' : constants.APPLICATION_ICON_SMALL_WITH_INDICATOR
-    }
+    ocean: bubble('Ocean', 'ocean'),
+    sunset: bubble('Sunset', 'sunset'),
+    teal: bubble('Teal', 'teal'),
+    violet: bubble('Violet', 'violet'),
+    rose: bubble('Rose', 'rose'),
+    graphite: bubble('Graphite', 'graphite'),
+    snow: bubble('Snow', 'snow'),
+    midnight: bubble('Midnight', 'midnight'),
+    amber: bubble('Amber', 'amber'),
+    mint: bubble('Mint', 'mint'),
+    crimson: bubble('Crimson', 'crimson'),
+    plum: bubble('Plum', 'plum'),
+    sand: bubble('Sand', 'sand')
 };
 
 const has = (id) => typeof id === 'string' && Object.prototype.hasOwnProperty.call(SETS, id);

@@ -5,6 +5,7 @@ const AutoLaunch = require('auto-launch')
 const contextMenu = require('electron-context-menu');
 const BadgeGenerator = require('./badge_generator');
 const path = require('path');
+const fs = require('fs');
 const CSSInjector = require('./utils/cssInjector');
 const topBar = require('./utils/topBar');
 const sideNav = require('./utils/sideNav');
@@ -27,26 +28,49 @@ const updates = require('./utils/updateCheck').init({
 });
 const appPath = app.getAppPath();
 const REFRESH_RATE = 60000; // 60 seconds: only a safety net now; unread changes arrive instantly from the page (unreadWatcher)
-// The app icon is the one chosen in Settings ("App icon", prefs.appIcon); iconSets.js lists the files for each choice.
-// These are replaced by applyIconSet() when the choice changes.
+// The app icon is the one chosen in Settings ("App icon", prefs.appIcon).  iconSets.js lists the built-in choices;
+// "custom" is a picture the person chose themselves (customIcon.js), kept in the app's data folder.
 const iconSets = require('./utils/iconSets');
+const customIcon = require('./utils/customIcon');
 const imageFile = (file) => path.join(appPath, 'images', file);
-let iconSet = iconSets.get(store.get('prefs.appIcon'));
-let icon = imageFile(iconSet.window);
-let iconTray = imageFile(iconSet.tray);
-let iconTrayDirty = imageFile(iconSet.trayDirty);
-let dockIcon = nativeImage.createFromPath(imageFile(iconSet.dock));
+const customIconFile = () => path.join(app.getPath('userData'), 'custom-icon.png');
+const hasCustomIcon = () => fs.existsSync(customIconFile());
 
-// Switches every place the app icon appears to the chosen set, right away.
+// The images for a choice.  Anything unknown, or a custom picture that has gone missing, gives the default set.
+function loadIcons(id) {
+    if (id === 'custom' && hasCustomIcon()) {
+        // The picture is the Dock and window icon.  The menu bar / tray icon on a Mac stays a built-in one (it has to be a
+        // single-colour template); on Windows and Linux it is the picture with an unread dot added.
+        try {
+            const file = customIconFile();
+            const trayImages = process.platform === 'darwin' ? null : customIcon.trayImages(file);
+            const builtin = iconSets.get('sunset');
+            return {
+                id: 'custom',
+                window: file,
+                dock: nativeImage.createFromPath(file),
+                tray: trayImages ? trayImages.plain : imageFile(builtin.tray),
+                trayDirty: trayImages ? trayImages.dirty : imageFile(builtin.trayDirty)
+            };
+        } catch (e) { console.log(`Could not use the custom icon: ${e && e.message}`); }
+    }
+    const set = iconSets.get(id === 'custom' ? undefined : id);
+    return {
+        id: set.id,
+        window: imageFile(set.window),
+        dock: nativeImage.createFromPath(imageFile(set.dock)),
+        tray: imageFile(set.tray),
+        trayDirty: imageFile(set.trayDirty)
+    };
+}
+let icons = loadIcons(store.get('prefs.appIcon'));
+
+// Switches every place the app icon appears to the chosen one, right away.
 function applyIconSet(id) {
-    iconSet = iconSets.get(id);
-    icon = imageFile(iconSet.window);
-    iconTray = imageFile(iconSet.tray);
-    iconTrayDirty = imageFile(iconSet.trayDirty);
-    dockIcon = nativeImage.createFromPath(imageFile(iconSet.dock));
-    app.dock && app.dock.setIcon(dockIcon);
-    tray && tray.setImage(lastNotification > 0 ? iconTrayDirty : iconTray);
-    if (process.platform !== 'darwin' && win && !win.isDestroyed()) { win.setIcon(icon); }   // macOS windows have no icon
+    icons = loadIcons(id);
+    app.dock && app.dock.setIcon(icons.dock);
+    tray && tray.setImage(lastNotification > 0 ? icons.trayDirty : icons.tray);
+    if (process.platform !== 'darwin' && win && !win.isDestroyed()) { win.setIcon(icons.window); }   // macOS windows have no icon
 }
 
 // Developer aid: `GV_DEBUG_PORT=9222 npm start` exposes Chromium's debugging port on localhost only, so the page
@@ -129,7 +153,7 @@ setInterval(updateNotifications.bind(this, app), REFRESH_RATE);
 
 app.whenReady().then(() => {
     // Set the Dock icon once the app is ready; setting it earlier can be ignored, which leaves the generic Electron icon.
-    app.dock && app.dock.setIcon(dockIcon);
+    app.dock && app.dock.setIcon(icons.dock);
     createWindow();
 });
 
@@ -159,7 +183,7 @@ function createWindow() {
         width: prefs.windowWidth || DEFAULT_WIDTH,
         height: prefs.windowHeight || DEFAULT_HEIGHT,
         backgroundColor: themeBackground(process.env.GV_THEME || prefs.theme || constants.DEFAULT_SETTING_THEME),
-        icon,
+        icon: icons.window,
         show: false,
         webPreferences: {
             spellcheck: prefs.spellcheck !== false,   // on by default; costs ~30 MB, can be switched off in Settings (restart to apply)
@@ -287,7 +311,7 @@ function createWindow() {
     if (tray) {
         tray.destroy;
     }
-    tray = createTray(iconTray, constants.APPLICATION_NAME);
+    tray = createTray(icons.tray, constants.APPLICATION_NAME);
 
     badgeGenerator = new BadgeGenerator(win);
 
@@ -426,10 +450,10 @@ function processNotificationCount(app, count) {
         // Update our notification area icon based on the count.  If it's greater than 0,
         // display the icon with a red dot, otherwise display the icon without a red dot.
         if (count > 0) {
-            tray && tray.setImage(iconTrayDirty);
+            tray && tray.setImage(icons.trayDirty);
         }
         else {
-            tray && tray.setImage(iconTray);
+            tray && tray.setImage(icons.tray);
         }
     }
 }
@@ -704,16 +728,29 @@ ipcMain.on('pref-change-copy-codes', (e, enabled) => {
     store.set('prefs', prefs);
 });
 
-// The icon choices for the Settings dropdown, and the one in use.
-ipcMain.handle('get-icon-sets', () => ({ sets: iconSets.list(), current: iconSet.id }));
+// The icon choices for the Settings dropdown: the built-in ones, whether a custom picture exists, and the one in use.
+ipcMain.handle('get-icon-sets', () => ({ sets: iconSets.list(), current: icons.id, hasCustom: hasCustomIcon() }));
 
 // Called when a different "App icon" is picked.  Applies at once and is remembered for next time.
 ipcMain.on('pref-change-app-icon', (e, id) => {
-    if (!iconSets.has(id)) { return; }
+    if (!iconSets.has(id) && !(id === 'custom' && hasCustomIcon())) { return; }
     const prefs = store.get('prefs') || {};
     prefs.appIcon = id;
     store.set('prefs', prefs);
     applyIconSet(id);
+});
+
+// "Choose your own image...": shows a file picker; a usable picture is saved and applied.  Answers 'ok', 'cancelled'
+// or 'not-an-image'.
+ipcMain.handle('pick-custom-icon', async (e) => {
+    const result = await customIcon.pick(BrowserWindow.fromWebContents(e.sender), customIconFile());
+    if (result === 'ok') {
+        const prefs = store.get('prefs') || {};
+        prefs.appIcon = 'custom';
+        store.set('prefs', prefs);
+        applyIconSet('custom');
+    }
+    return result;
 });
 
 // Called when the "check for updates" checkbox has been checked/unchecked.
