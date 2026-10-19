@@ -44,6 +44,6 @@ const has = (id) => typeof id === 'string' && Object.prototype.hasOwnProperty.ca
 // The set for a saved choice; anything unknown (an old or edited setting) falls back to the default.
 const get = (id) => { const key = has(id) ? id : DEFAULT; return Object.assign({ id: key }, SETS[key]); };
 
-const list = () => Object.keys(SETS).map((id) => ({ id, label: SETS[id].label }));
+const list = () => Object.keys(SETS).map((id) => ({ id, label: SETS[id].label, preview: SETS[id].window }));
 
 module.exports = { DEFAULT, SETS, has, get, list };

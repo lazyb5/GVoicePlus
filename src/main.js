@@ -729,7 +729,7 @@ ipcMain.on('pref-change-copy-codes', (e, enabled) => {
 });
 
 // The icon choices for the Settings dropdown: the built-in ones, whether a custom picture exists, and the one in use.
-ipcMain.handle('get-icon-sets', () => ({ sets: iconSets.list(), current: icons.id, hasCustom: hasCustomIcon() }));
+ipcMain.handle('get-icon-sets', () => ({ sets: iconSets.list(), current: icons.id, hasCustom: hasCustomIcon(), customFile: hasCustomIcon() ? customIconFile() : null }));
 
 // Called when a different "App icon" is picked.  Applies at once and is remembered for next time.
 ipcMain.on('pref-change-app-icon', (e, id) => {

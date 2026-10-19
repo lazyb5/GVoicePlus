@@ -144,29 +144,59 @@
         ipcRenderer.send('pref-change-spellcheck', e.target.checked);
     });
 
-    // "App icon": the built-in icons, "Your image" once a picture has been chosen, and "Choose your own image...".
-    // Applies immediately.
+    // "App icon": a grid of pictures (the built-in icons, "Your image" once one has been chosen, and a "+" tile that opens
+    // the file picker).  Applies immediately.
     try {
-        const { sets, current, hasCustom } = await ipcRenderer.invoke('get-icon-sets');
-        if (sets.length > 1) {
-            const iconPicker = document.getElementById('app-icon');
-            const chooseOption = new Option('Choose your own image\u2026', '__choose__');
-            sets.forEach((s) => iconPicker.add(new Option(s.label, s.id)));
-            iconPicker.add(chooseOption);
-            const showCustomOption = () => {
-                if (!iconPicker.querySelector('option[value="custom"]')) { iconPicker.add(new Option('Your image', 'custom'), chooseOption); }
+        const first = await ipcRenderer.invoke('get-icon-sets');
+        if (first.sets.length > 1) {
+            const grid = document.getElementById('app-icon-grid');
+            const nameLabel = document.getElementById('app-icon-name');
+            let selected = first.current;
+            let customUrl = first.customFile ? require('url').pathToFileURL(first.customFile).href + '?v=' + Date.now() : null;
+            const labels = {};
+            first.sets.forEach((s) => { labels[s.id] = s.label; });
+            labels.custom = 'Your image';
+            const tile = (id, title, src) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.className = 'icon-tile';
+                b.title = title;
+                b.setAttribute('aria-label', title);
+                b.dataset.id = id;
+                if (src) { const img = document.createElement('img'); img.src = src; img.alt = ''; b.appendChild(img); }
+                return b;
             };
-            if (hasCustom) { showCustomOption(); }
-            iconPicker.value = current;
-            let lastChoice = iconPicker.value;
-            iconPicker.addEventListener('change', async (e) => {
-                const value = e.target.value;
-                if (value !== '__choose__') { lastChoice = value; ipcRenderer.send('pref-change-app-icon', value); return; }
+            const render = () => {
+                grid.textContent = '';
+                first.sets.forEach((s) => grid.appendChild(tile(s.id, s.label, '../../images/' + s.preview)));
+                if (customUrl) { grid.appendChild(tile('custom', 'Your image', customUrl)); }
+                const plus = tile('__choose__', 'Choose your own image\u2026');
+                plus.classList.add('icon-tile-plus');
+                plus.textContent = '+';
+                grid.appendChild(plus);
+                grid.querySelectorAll('.icon-tile').forEach((b) => {
+                    const on = b.dataset.id === selected;
+                    b.classList.toggle('selected', on);
+                    b.setAttribute('aria-pressed', String(on));
+                });
+                nameLabel.textContent = '\u2013 ' + (labels[selected] || '');
+            };
+            grid.addEventListener('click', async (e) => {
+                const b = e.target.closest('.icon-tile');
+                if (!b) { return; }
+                const id = b.dataset.id;
+                if (id !== '__choose__') { selected = id; render(); ipcRenderer.send('pref-change-app-icon', id); return; }
                 const result = await ipcRenderer.invoke('pick-custom-icon');
-                if (result === 'ok') { showCustomOption(); iconPicker.value = 'custom'; lastChoice = 'custom'; return; }
-                iconPicker.value = lastChoice;   // cancelled or unusable: keep what was chosen before
-                if (result === 'not-an-image') { window.alert('That file could not be used as an icon. Try a PNG or JPG, or an icon file (.icns on a Mac, .ico on Windows).'); }
+                if (result === 'ok') {
+                    const now = await ipcRenderer.invoke('get-icon-sets');
+                    customUrl = now.customFile ? require('url').pathToFileURL(now.customFile).href + '?v=' + Date.now() : null;
+                    selected = 'custom';
+                    render();
+                } else if (result === 'not-an-image') {
+                    window.alert('That file could not be used as an icon. Try a PNG or JPG, or an icon file (.icns on a Mac, .ico on Windows).');
+                }
             });
+            render();
             document.getElementById('app-icon-group').style.display = '';
         }
     } catch (e) { /* older main process: no icon choice */ }

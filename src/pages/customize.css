@@ -133,3 +133,34 @@ body.themed input[type=range]::-webkit-slider-thumb {
     border-radius:      50%;
     background:         var(--gv-primary);
 }
+
+/*"App icon" picture grid: one small square per icon; the chosen one gets a coloured outline.*/
+.icon-grid {
+    display:   flex;
+    flex-wrap: wrap;
+    gap:       6px;
+}
+.icon-tile {
+    width:         52px;
+    height:        52px;
+    padding:       3px;
+    border:        2px solid transparent;
+    border-radius: 14px;
+    background:    transparent;
+    cursor:        pointer;
+    line-height:   1;
+}
+.icon-tile img {
+    width:  100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+.icon-tile:hover { background: rgba(128, 128, 128, 0.18); }
+.icon-tile:focus-visible { outline: 2px solid var(--gv-primary, #007bff); outline-offset: 1px; }
+.icon-tile.selected { border-color: var(--gv-primary, #007bff); }
+.icon-tile-plus {
+    border:    2px dashed rgba(128, 128, 128, 0.6);
+    font-size: 26px;
+    color:     rgba(128, 128, 128, 0.9);
+}
