@@ -234,11 +234,12 @@ function createWindow() {
         {
             label: '&View',
             submenu: [
-                {role:  'zoomIn', visible: false},                                           // Zoom in (Ctrl+Shift++)
-                {role:  'zoomIn', accelerator: 'CommandOrControl+='},                        // Zoom in (Ctrl+=)
-                {role:  'zoomOut'},                                                          // Zoom out (Ctrl+-)
-                {role:  'zoomOut', visible: false, accelerator: 'CommandOrControl+Shift+_'}, // Zoom out (Ctrl+Shift+_)
-                {role:  'resetZoom'},                                                        // Reset zoom (Ctrl+0)
+                // The zoom keys always zoom the main window (never the Settings window), and the Settings zoom box follows them.
+                {label: 'Zoom In',  visible: false, accelerator: 'CommandOrControl+Plus',  click: () => {zoomMainWindow(+0.5);}}, // Zoom in (Ctrl+Shift++)
+                {label: 'Zoom In',  accelerator: 'CommandOrControl+=',                     click: () => {zoomMainWindow(+0.5);}}, // Zoom in (Ctrl+=)
+                {label: 'Zoom Out', accelerator: 'CommandOrControl+-',                     click: () => {zoomMainWindow(-0.5);}}, // Zoom out (Ctrl+-)
+                {label: 'Zoom Out', visible: false, accelerator: 'CommandOrControl+Shift+_', click: () => {zoomMainWindow(-0.5);}}, // Zoom out (Ctrl+Shift+_)
+                {label: 'Actual Size', accelerator: 'CommandOrControl+0',                  click: () => {setMainZoom(0);}},        // Reset zoom (Ctrl+0)
                 {type:  'separator'},
                 {role:  'toggleFullScreen'},                                                 // Toggle full screen (F11)
                 {type:  'separator'},
@@ -540,6 +541,15 @@ function releaseButtonFocus() {
     } catch (e) { console.log('Releasing focus failed:', e.message); }
 }
 
+// Sets the main window's zoom level (kept between 25% and 500%, like the Settings zoom box) and tells the open
+// Settings window, so its zoom box always shows the real level.
+function setMainZoom(level) {
+    level = Math.min(8.8, Math.max(-7.6, level));
+    win.webContents.setZoomLevel(level);
+    if (settingsWindow && !settingsWindow.isDestroyed()) { settingsWindow.webContents.send('zoom-level-changed', level); }
+}
+function zoomMainWindow(step) { setMainZoom(win.webContents.getZoomLevel() + step); }
+
 // Creates (if it doesn't already exist) this application's "Settings" window, and then displays it to the user.
 function showSettingsWindow() {
     if (!settingsWindow) {
@@ -560,6 +570,9 @@ function showSettingsWindow() {
                 contextIsolation: false
             }});
         settingsWindow.removeMenu();
+        settingsWindow.webContents.setZoomLevel(0);                  // the Settings window stays at 100%; zoom only changes the main window
+        settingsWindow.webContents.setVisualZoomLevelLimits(1, 1);   // no pinch zoom either
+        settingsWindow.webContents.on('did-finish-load', () => { settingsWindow.webContents.setZoomLevel(0); });
 
         // Safety net: show the window anyway if the page never reports in.
         const settingsShowTimer = setTimeout(() => {
@@ -649,6 +662,16 @@ ipcMain.on('get-early-theme-css', (event, href) => {
     event.returnValue = css;
 });
 
+// The Settings page reports how tall its tallest tab is; grow the window to fit (never smaller than the default,
+// never taller than the screen) so no tab needs scrolling.
+ipcMain.on('settings-fit-height', (event, height) => {
+    if (!settingsWindow || settingsWindow.isDestroyed() || !(height > 0)) { return; }
+    const area = require('electron').screen.getDisplayMatching(settingsWindow.getBounds()).workArea;
+    const [width, current] = settingsWindow.getContentSize();
+    const fitted = Math.min(Math.max(Math.round(height), current), area.height - 60);
+    if (fitted !== current) { settingsWindow.setContentSize(width, fitted); settingsWindow.center(); }
+});
+
 // Called by the Settings page once it has applied the theme colours; only then is the window shown.
 ipcMain.on('settings-ready', () => {
     if (settingsWindow && !settingsWindow.isDestroyed() && !settingsWindow.isVisible()) { settingsWindow.show(); }
@@ -674,7 +697,7 @@ ipcMain.on('pref-change-zoom', (event, zoomLevel) => {
     // Apply the newly selected zoom level.  Note that there is no need to save this setting to
     // the user's settings store.  Electron handles remembering our main window's zoom level by
     // default, so it will automatically be restored the next time the application is launched.
-    win.webContents.setZoomLevel(parseFloat(zoomLevel));
+    setMainZoom(parseFloat(zoomLevel));
 });
 
 // Called when the "show menu bar" checkbox has been checked/unchecked.

@@ -31,7 +31,6 @@
     };
     await applyPalette(prefs.theme || constants.DEFAULT_SETTING_THEME);
     // The window starts hidden; now that it is themed, ask the main process to show it.
-    requestAnimationFrame(() => requestAnimationFrame(() => ipcRenderer.send('settings-ready')));
 
     // "Theme": a Dark/Light switch plus one swatch per colour, each drawn in that theme's own colours.  The M3 colours come
     // in a dark and a light version (ids like "m3-rose-dark"); the switch chooses which one the swatches stand for.  The
@@ -144,6 +143,11 @@
         percent = Math.min(500, Math.max(25, Math.round(percent)));
         zoomSlider.value = percent;
         ipcRenderer.send('pref-change-zoom', percentToLevel(percent));
+    });
+
+    // The zoom keys (Cmd/Ctrl + - 0) change the main window, so keep the box in step with them.
+    ipcRenderer.on('zoom-level-changed', (e, level) => {
+        if (document.activeElement !== zoomSlider) { zoomSlider.value = levelToPercent(level); }
     });
 
     // Whenever the user clicks the "reset zoom" button, set the zoom
@@ -308,13 +312,15 @@
 
     // "Top bar": a picture of Google Voice's top bar.  Clicking an item hides or shows it (applied to the main window at once).
     // The keys and their order match src/utils/topBar.js.
+    // Headphones, like the audio button on the Google Voice page (a fixed drawing, not page content).
+    const HEADPHONES_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>';
     const TOPBAR_ITEMS = [
         { key: 'menu',     label: 'Menu',            text: '\u2630' },
         { key: 'logo',     label: 'Voice logo',      text: 'Voice' },
         { key: 'search',   label: 'Search',          text: 'Search', wide: true },
         { key: 'status',   label: 'Receiving calls', text: 'Receiving calls' },
         { key: 'upgrade',  label: 'Upgrade',         text: 'Upgrade' },
-        { key: 'audio',    label: 'Audio settings',  text: '\u266A' },
+        { key: 'audio',    label: 'Audio settings',  text: '', icon: HEADPHONES_SVG },
         { key: 'help',     label: 'Help',            text: '?' },
         { key: 'settings', label: 'Settings',        text: '\u2699' },
         { key: 'apps',     label: 'Google apps',     text: '\u25A6' },
@@ -337,7 +343,7 @@
             b.type = 'button';
             b.className = 'tb-chip' + (item.wide ? ' tb-wide' : '') + (hiddenBar.has(item.key) && !barAbsent(item.key) ? ' tb-hidden' : '') + (barAbsent(item.key) ? ' tb-absent' : '');
             if (barAbsent(item.key)) { b.setAttribute('aria-disabled', 'true'); }   // not the disabled attribute: that would stop the hover caption
-            b.textContent = item.text;
+            if (item.icon) { b.innerHTML = item.icon; } else { b.textContent = item.text; }
             b.dataset.key = item.key;
             b.setAttribute('aria-label', item.label);
             b.setAttribute('aria-pressed', String(!hiddenBar.has(item.key)));
@@ -374,4 +380,18 @@
     closeButton.addEventListener('click', (e) => {
         window.close();
     });
+
+    // Size the window to fit the tallest tab, so no tab needs scrolling, then ask the main process to show it.
+    {
+        const row = document.getElementById('first-row');
+        let tallest = 0;
+        document.querySelectorAll('.tab-panel').forEach((panel) => {
+            const was = panel.style.display;
+            panel.style.display = '';
+            tallest = Math.max(tallest, panel.offsetHeight);
+            panel.style.display = was;
+        });
+        ipcRenderer.send('settings-fit-height', Math.ceil(window.innerHeight - row.clientHeight + tallest + 8));
+        requestAnimationFrame(() => requestAnimationFrame(() => ipcRenderer.send('settings-ready')));
+    }
 })();
