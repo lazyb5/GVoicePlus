@@ -6,61 +6,16 @@
     </head>
     <body>
         <div class="dialog-grid">
+            <!--Tabs: General and Appearance-->
+            <div class="tab-bar" role="tablist">
+                <button type="button" class="tab-btn selected" role="tab" data-tab="general" id="tab-btn-general">General</button>
+                <button type="button" class="tab-btn" role="tab" data-tab="appearance" id="tab-btn-appearance">Appearance</button>
+                <button type="button" class="tab-btn" role="tab" data-tab="layout" id="tab-btn-layout">Layout</button>
+            </div>
+
             <!--Place setting controls in this div.-->
             <div id="first-row">
-                <div class="two-col">
-                    <!--"Theme" dropdown-->
-                    <div class="form-group">
-                        <label for="theme" class="font-weight-bold">Theme</label>
-                        <select class="form-control" id="theme">
-                            <option value="default">Default</option>
-                            <optgroup label="M3 Vibrant">
-                                <option value="m3-pumpkin-dark">Pumpkin (Dark)</option>
-                                <option value="m3-pumpkin-light">Pumpkin (Light)</option>
-                                <option value="m3-github-dark">GitHub (Dark)</option>
-                                <option value="m3-github-light">GitHub (Light)</option>
-                                <option value="m3-atom-one-dark">Atom One (Dark)</option>
-                                <option value="m3-atom-one-light">Atom One (Light)</option>
-                                <option value="m3-rose-dark">Rose (Dark)</option>
-                                <option value="m3-rose-light">Rose (Light)</option>
-                                <option value="m3-sepia-dark">Sepia (Dark)</option>
-                                <option value="m3-sepia-light">Sepia (Light)</option>
-                                <option value="m3-green-dark">Green (Dark)</option>
-                                <option value="m3-green-light">Green (Light)</option>
-                                <option value="m3-navy-dark">Navy (Dark)</option>
-                                <option value="m3-navy-light">Navy (Light)</option>
-                            </optgroup>
-                            <optgroup label="Classic">
-                                <option value="dracula">Dracula</option>
-                                <option value="solar">Solar</option>
-                                <option value="minty">Minty</option>
-                                <option value="cerulean">Cerulean</option>
-                                <option value="darkplus">DarkPlus</option>
-                                <option value="demo">Theme Debug</option>
-                            </optgroup>
-                        </select>
-                    </div>
-
-                    <!--"Zoom" percent box-->
-                    <div class="form-group">
-                        <label class="font-weight-bold" for="zoom">Zoom (%)</label>
-                        <div class="form-row">
-                            <div class="col">
-                                <input type="number" class="form-control" id="zoom" min="25" max="500" step="5" />
-                            </div>
-                            <div class="col-auto">
-                                <button type="button" class="btn btn-secondary" id="reset-zoom">Reset</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!--"App icon" picture grid (hidden while there is only one icon to choose from)-->
-                <div class="form-group" id="app-icon-group" style="display: none">
-                    <label class="font-weight-bold">App icon <span id="app-icon-name" class="font-weight-normal"></span></label>
-                    <div id="app-icon-grid" class="icon-grid"></div>
-                </div>
-
+                <div class="tab-panel" id="tab-general" role="tabpanel">
                 <!--Options-->
                 <div class="form-group">
                     <label class="font-weight-bold">Options</label>
@@ -108,17 +63,59 @@
                         </div>
                     </div>
                 </div>
+                </div>
 
-                <!-- Top bar and sidebars -->
+                <div class="tab-panel" id="tab-appearance" role="tabpanel" style="display: none">
+                <!--"Theme" picture grid (the swatches are built by customize.js)-->
+                <div class="form-group" id="theme-group">
+                    <label class="font-weight-bold">Theme <span id="theme-name" class="font-weight-normal"></span></label>
+                    <div class="mode-switch" id="mode-switch" role="group" aria-label="Dark or light">
+                        <button type="button" data-mode="dark">Dark</button>
+                        <button type="button" data-mode="light">Light</button>
+                    </div>
+                    <div id="theme-grid"></div>
+                </div>
+
+                <div class="two-col">
+                    <!--"Zoom" percent box-->
+                    <div class="form-group">
+                        <label class="font-weight-bold" for="zoom">Zoom (%)</label>
+                        <div class="form-row">
+                            <div class="col">
+                                <input type="number" class="form-control" id="zoom" min="25" max="500" step="5" />
+                            </div>
+                            <div class="col-auto">
+                                <button type="button" class="btn btn-secondary" id="reset-zoom">Reset</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!--"App icon" picture grid (hidden while there is only one icon to choose from)-->
+                <div class="form-group" id="app-icon-group" style="display: none">
+                    <label class="font-weight-bold">App icon <span id="app-icon-name" class="font-weight-normal"></span></label>
+                    <div id="app-icon-grid" class="icon-grid"></div>
+                </div>
+                </div>
+
+                <div class="tab-panel" id="tab-layout" role="tabpanel" style="display: none">
+                <!--Top bar: a picture of it; click an item to hide or show it (built by customize.js)-->
                 <div class="form-group">
-                    <label class="font-weight-bold">Top bar and sidebars</label>
+                    <label class="font-weight-bold">Top bar</label>
+                    <div class="topbar-mock" id="topbar-mock"></div>
+                    <div class="topbar-footer">
+                        <small id="topbar-caption" class="form-text"></small>
+                        <button type="button" class="btn btn-secondary btn-sm" id="topbar-show-all">Show all</button>
+                    </div>
+                </div>
+
+                <!--Sidebars-->
+                <div class="form-group">
+                    <label class="font-weight-bold">Sidebars</label>
                     <div class="two-col">
                         <div>
-                            <button type="button" class="btn btn-secondary" id="customize-topbar">Choose which items to show...</button>
-                            <small class="form-text">Closes this window. Then click items in the top bar to hide or show them.</small>
-
                             <!-- Hide dialer sidebar -->
-                            <div class="form-check" style="margin-top: 12px">
+                            <div class="form-check">
                                 <input class="form-check-input" type="checkbox" id="hide-dialer-sidebar">
                                 <label class="form-check-label" for="hide-dialer-sidebar">Hide dialer sidebar</label>
                             </div>
@@ -139,6 +136,7 @@
                             </div>
                         </div>
                     </div>
+                </div>
                 </div>
             </div>
 

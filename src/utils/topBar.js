@@ -177,6 +177,8 @@ function pageTopBar() {
 
     window.__gvTopBar = {
         set(keys) { hiddenKeys = new Set(keys); if (!editing) { applyHidden(hiddenKeys); } watch(); },
+        // Which items exist on the page right now (an item we hid is still there).
+        present() { return ITEMS.filter((item) => item.find().length > 0).map((item) => item.key); },
         edit
     };
 }
@@ -188,6 +190,14 @@ module.exports.SOURCE = SOURCE;   // exported for testing
 module.exports.apply = function (win, keys) {
     if (!win || win.isDestroyed()) { return; }
     win.webContents.executeJavaScript(`${SOURCE} window.__gvTopBar.set(${JSON.stringify(keys || [])});`).catch(() => {});
+};
+
+// Which item keys exist on the main window's page, or null if that can't be told (page not loaded, or the bar not drawn yet).
+module.exports.present = function (win) {
+    if (!win || win.isDestroyed()) { return Promise.resolve(null); }
+    return win.webContents.executeJavaScript(`${SOURCE} (window.__gvTopBar.present ? window.__gvTopBar.present() : null);`)
+        .then((keys) => (Array.isArray(keys) && keys.length >= 3 ? keys : null))   // fewer than 3 = the bar isn't there yet (e.g. signed out)
+        .catch(() => null);
 };
 
 // Enters edit mode in the main window.  Resolves with { status: 'done' | 'cancel' | 'busy', hidden: [keys] }.

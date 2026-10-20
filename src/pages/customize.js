@@ -33,15 +33,100 @@
     // The window starts hidden; now that it is themed, ask the main process to show it.
     requestAnimationFrame(() => requestAnimationFrame(() => ipcRenderer.send('settings-ready')));
 
-    // Populate the "theme" dropdown with the user's currently selected theme.
-    // Notify the main process whenever the user selects a different theme.
-    const themePicker = document.getElementById('theme');
-    themePicker.value = (prefs.theme || constants.DEFAULT_SETTING_THEME);
-    themePicker.addEventListener('change', (e) => {
-        const theme = e.target.value;
-        ipcRenderer.send('pref-change-theme', theme);
-        applyPalette(theme);
+    // "Theme": a Dark/Light switch plus one swatch per colour, each drawn in that theme's own colours.  The M3 colours come
+    // in a dark and a light version (ids like "m3-rose-dark"); the switch chooses which one the swatches stand for.  The
+    // classic themes have just one version.  Picking a swatch applies it at once and tells the main process.
+    const M3_COLOURS = [['pumpkin', 'Pumpkin'], ['github', 'GitHub'], ['atom-one', 'Atom One'], ['rose', 'Rose'],
+                        ['sepia', 'Sepia'], ['green', 'Green'], ['navy', 'Navy']];
+    const CLASSIC_THEMES = [['dracula', 'Dracula'], ['solar', 'Solar'], ['minty', 'Minty'], ['cerulean', 'Cerulean'], ['darkplus', 'DarkPlus']];
+    const themeGrid = document.getElementById('theme-grid');
+    const themeNameLabel = document.getElementById('theme-name');
+    const modeButtons = Array.from(document.querySelectorAll('#mode-switch button'));
+    const allThemeIds = ['default'].concat(CLASSIC_THEMES.map((t) => t[0]),
+        ...M3_COLOURS.map((c) => ['m3-' + c[0] + '-dark', 'm3-' + c[0] + '-light']));
+    let selectedTheme = prefs.theme || constants.DEFAULT_SETTING_THEME;
+    let palettes = {};
+    try { palettes = await ipcRenderer.invoke('get-theme-palettes', allThemeIds); } catch (e) { /* older main process: plain swatches */ }
+    const isLightColour = (c) => {
+        const m = /^#([0-9a-f]{6})$/i.exec(c || '');
+        if (!m) { return null; }
+        const n = parseInt(m[1], 16);
+        return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 140;
+    };
+    let mode = 'dark';
+    if (/^m3-.*-light$/.test(selectedTheme)) { mode = 'light'; }
+    else if (!/^m3-.*-dark$/.test(selectedTheme)) {
+        const pal = palettes[selectedTheme];
+        mode = (!pal && selectedTheme === 'default') || (pal && isLightColour(pal.bg)) ? 'light' : 'dark';
+    }
+    const m3Id = (name) => 'm3-' + name + '-' + mode;
+    const themeLabel = (id) => {
+        if (id === 'default') { return 'Default'; }
+        const m = /^m3-(.*)-(dark|light)$/.exec(id);
+        if (m) { const c = M3_COLOURS.find((x) => x[0] === m[1]); return (c ? c[1] : m[1]) + ' (' + (m[2] === 'dark' ? 'Dark' : 'Light') + ')'; }
+        const t = CLASSIC_THEMES.find((x) => x[0] === id);
+        return t ? t[1] : id;
+    };
+    // The name beside the "Theme" label follows the mouse (or keyboard focus); it goes back to the chosen theme's name after.
+    const showThemeName = (id) => { themeNameLabel.textContent = '\u2013 ' + themeLabel(id); };
+    themeGrid.addEventListener('mouseover', (e) => { const b = e.target.closest('.theme-swatch'); if (b) { showThemeName(b.dataset.id); } });
+    themeGrid.addEventListener('focusin', (e) => { const b = e.target.closest('.theme-swatch'); if (b) { showThemeName(b.dataset.id); } });
+    themeGrid.addEventListener('mouseleave', () => showThemeName(selectedTheme));
+    themeGrid.addEventListener('focusout', () => showThemeName(selectedTheme));
+    const swatch = (id) => {
+        const pal = palettes[id] || { bg: '#ffffff', fg: '#212529', primary: '#1a73e8' };   // Default (or unreadable): plain light
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'theme-swatch' + (id === selectedTheme ? ' selected' : '');
+        b.setAttribute('aria-label', themeLabel(id));
+        b.setAttribute('aria-pressed', String(id === selectedTheme));
+        b.dataset.id = id;
+        b.style.backgroundColor = pal.bg;
+        b.style.color = pal.fg;
+        const aa = document.createElement('span');
+        aa.className = 'swatch-text';
+        aa.textContent = 'Aa';
+        const dot = document.createElement('span');
+        dot.className = 'swatch-dot';
+        dot.style.backgroundColor = pal.primary;
+        b.appendChild(aa);
+        b.appendChild(dot);
+        return b;
+    };
+    const renderThemes = () => {
+        themeGrid.textContent = '';
+        modeButtons.forEach((b) => { b.classList.toggle('selected', b.dataset.mode === mode); b.setAttribute('aria-pressed', String(b.dataset.mode === mode)); });
+        const row = document.createElement('div');
+        row.className = 'swatch-row';
+        row.appendChild(swatch('default'));
+        M3_COLOURS.forEach(([name]) => row.appendChild(swatch(m3Id(name))));
+        themeGrid.appendChild(row);
+        const h = document.createElement('div');
+        h.className = 'theme-group-label';
+        h.textContent = 'Classic';
+        themeGrid.appendChild(h);
+        const row2 = document.createElement('div');
+        row2.className = 'swatch-row';
+        CLASSIC_THEMES.forEach(([id]) => row2.appendChild(swatch(id)));
+        themeGrid.appendChild(row2);
+        showThemeName(selectedTheme);
+    };
+    const chooseTheme = (id) => {
+        selectedTheme = id;
+        renderThemes();
+        ipcRenderer.send('pref-change-theme', id);
+        applyPalette(id);
+    };
+    themeGrid.addEventListener('click', (e) => {
+        const b = e.target.closest('.theme-swatch');
+        if (b) { chooseTheme(b.dataset.id); }
     });
+    modeButtons.forEach((btn) => btn.addEventListener('click', () => {
+        mode = btn.dataset.mode;
+        const m = /^m3-(.*)-(dark|light)$/.exec(selectedTheme);
+        if (m) { chooseTheme(m3Id(m[1])); } else { renderThemes(); }   // a classic theme stays; only the swatches change
+    }));
+    renderThemes();
     
     // Set the "zoom" slider to the main window's current zoom level.
     // Notify the main process whenever the user selects a new level.
@@ -156,11 +241,13 @@
             const labels = {};
             first.sets.forEach((s) => { labels[s.id] = s.label; });
             labels.custom = 'Your image';
+            labels.__choose__ = 'Choose your own image\u2026';
+            // The name beside the "App icon" label follows the mouse (or keyboard focus), then goes back to the chosen icon's name.
+            const showName = (id) => { nameLabel.textContent = '\u2013 ' + (labels[id] || ''); };
             const tile = (id, title, src) => {
                 const b = document.createElement('button');
                 b.type = 'button';
                 b.className = 'icon-tile';
-                b.title = title;
                 b.setAttribute('aria-label', title);
                 b.dataset.id = id;
                 if (src) { const img = document.createElement('img'); img.src = src; img.alt = ''; b.appendChild(img); }
@@ -179,8 +266,12 @@
                     b.classList.toggle('selected', on);
                     b.setAttribute('aria-pressed', String(on));
                 });
-                nameLabel.textContent = '\u2013 ' + (labels[selected] || '');
+                showName(selected);
             };
+            grid.addEventListener('mouseover', (e) => { const b = e.target.closest('.icon-tile'); if (b) { showName(b.dataset.id); } });
+            grid.addEventListener('focusin', (e) => { const b = e.target.closest('.icon-tile'); if (b) { showName(b.dataset.id); } });
+            grid.addEventListener('mouseleave', () => showName(selected));
+            grid.addEventListener('focusout', () => showName(selected));
             grid.addEventListener('click', async (e) => {
                 const b = e.target.closest('.icon-tile');
                 if (!b) { return; }
@@ -215,9 +306,67 @@
         ipcRenderer.send('pref-change-check-updates', e.target.checked);
     });
 
-    // "Choose which items to show": closes this window and lets the user click items in the main window's top bar.
-    document.getElementById('customize-topbar').addEventListener('click', () => {
-        ipcRenderer.send('topbar-edit');
+    // "Top bar": a picture of Google Voice's top bar.  Clicking an item hides or shows it (applied to the main window at once).
+    // The keys and their order match src/utils/topBar.js.
+    const TOPBAR_ITEMS = [
+        { key: 'menu',     label: 'Menu',            text: '\u2630' },
+        { key: 'logo',     label: 'Voice logo',      text: 'Voice' },
+        { key: 'search',   label: 'Search',          text: 'Search', wide: true },
+        { key: 'status',   label: 'Receiving calls', text: 'Receiving calls' },
+        { key: 'upgrade',  label: 'Upgrade',         text: 'Upgrade' },
+        { key: 'audio',    label: 'Audio settings',  text: '\u266A' },
+        { key: 'help',     label: 'Help',            text: '?' },
+        { key: 'settings', label: 'Settings',        text: '\u2699' },
+        { key: 'apps',     label: 'Google apps',     text: '\u25A6' },
+        { key: 'account',  label: 'Account',         text: '\u25CF' }
+    ];
+    const hiddenBar = new Set(Array.isArray(prefs.hiddenTopBarItems) ? prefs.hiddenTopBarItems : (prefs.hideUpgradeButton ? ['upgrade'] : []));
+    let barPresent = null;   // keys of the items that exist on this account's page; null = unknown (then nothing is greyed out)
+    try { barPresent = await ipcRenderer.invoke('get-topbar-present'); } catch (e) { /* older main process */ }
+    const barAbsent = (key) => Array.isArray(barPresent) && !barPresent.includes(key);
+    const barMock = document.getElementById('topbar-mock');
+    const barCaption = document.getElementById('topbar-caption');
+    const barSummary = () => {
+        const names = TOPBAR_ITEMS.filter((i) => hiddenBar.has(i.key) && !barAbsent(i.key)).map((i) => i.label);
+        barCaption.textContent = names.length ? 'Hidden: ' + names.join(', ') : 'Click an item to hide or show it. Nothing is hidden.';
+    };
+    const renderBar = () => {
+        barMock.textContent = '';
+        TOPBAR_ITEMS.forEach((item) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'tb-chip' + (item.wide ? ' tb-wide' : '') + (hiddenBar.has(item.key) && !barAbsent(item.key) ? ' tb-hidden' : '') + (barAbsent(item.key) ? ' tb-absent' : '');
+            if (barAbsent(item.key)) { b.setAttribute('aria-disabled', 'true'); }   // not the disabled attribute: that would stop the hover caption
+            b.textContent = item.text;
+            b.dataset.key = item.key;
+            b.setAttribute('aria-label', item.label);
+            b.setAttribute('aria-pressed', String(!hiddenBar.has(item.key)));
+            barMock.appendChild(b);
+        });
+        barSummary();
+    };
+    const saveBar = () => { renderBar(); ipcRenderer.send('pref-change-topbar-hidden', Array.from(hiddenBar)); };
+    const barItemFor = (e) => { const b = e.target.closest('.tb-chip'); return b ? TOPBAR_ITEMS.find((i) => i.key === b.dataset.key) : null; };
+    const barHover = (e) => { const item = barItemFor(e); if (item) { barCaption.textContent = barAbsent(item.key) ? item.label + ' \u2013 not on your page' : item.label + (hiddenBar.has(item.key) ? ' \u2013 hidden (click to show)' : ' \u2013 shown (click to hide)'); } };
+    barMock.addEventListener('click', (e) => {
+        const item = barItemFor(e);
+        if (!item || barAbsent(item.key)) { return; }
+        if (hiddenBar.has(item.key)) { hiddenBar.delete(item.key); } else { hiddenBar.add(item.key); }
+        saveBar();
+    });
+    barMock.addEventListener('mouseover', barHover);
+    barMock.addEventListener('focusin', barHover);
+    barMock.addEventListener('mouseleave', barSummary);
+    barMock.addEventListener('focusout', barSummary);
+    document.getElementById('topbar-show-all').addEventListener('click', () => { hiddenBar.clear(); saveBar(); });
+    renderBar();
+
+    // Tabs: "General" and "Appearance" show one group of settings each.
+    document.querySelectorAll('.tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('selected', b === btn));
+            document.querySelectorAll('.tab-panel').forEach((panel) => { panel.style.display = panel.id === 'tab-' + btn.dataset.tab ? '' : 'none'; });
+        });
     });
 
     // Close the window if the user clicks the "Close" button.

@@ -547,7 +547,7 @@ function showSettingsWindow() {
         // us to know when the window is open, preventing the user from opening it a second time.
         settingsWindow = new BrowserWindow({
             width: 680,
-            height: 560,
+            height: 585,
             title: 'Settings',
             parent: win,
             modal: true,
@@ -825,6 +825,20 @@ ipcMain.on('topbar-edit', async () => {
     }
 });
 
+// Which top-bar items exist on this account's page (null = unknown), so Settings can grey out the ones that don't.
+ipcMain.handle('get-topbar-present', () => topBar.present(win));
+
+// The top-bar picture in Settings: save which items are hidden and apply it to the open page straight away.
+ipcMain.on('pref-change-topbar-hidden', (e, keys) => {
+    if (!Array.isArray(keys)) { return; }
+    const hidden = keys.filter((k) => typeof k === 'string');
+    const prefs = store.get('prefs') || {};
+    prefs.hiddenTopBarItems = hidden;
+    delete prefs.hideUpgradeButton;
+    store.set('prefs', prefs);
+    topBar.apply(win, hidden);
+});
+
 // Unread count pushed by the page the moment it changes.
 ipcMain.on('gv-unread', (e, count) => {
     if (Number.isFinite(count)) { processNotificationCount(app, count); }
@@ -832,3 +846,9 @@ ipcMain.on('gv-unread', (e, count) => {
 
 // Colours of the selected theme, so the Settings window can match it.
 ipcMain.handle('get-theme-palette', (e, theme) => themePalette.get(appPath, theme || store.get('prefs.theme')));
+// The colours of several themes at once, for the swatches in the Settings window (null = no colours known, e.g. Default).
+ipcMain.handle('get-theme-palettes', (e, ids) => {
+    const out = {};
+    (Array.isArray(ids) ? ids : []).forEach((id) => { if (typeof id === 'string') { out[id] = themePalette.get(appPath, id); } });
+    return out;
+});
