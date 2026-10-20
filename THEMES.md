@@ -75,7 +75,6 @@ The easiest way to visualize these components is to create a new theme with back
 ```
 
 Gives us the follow output so we can easily tell which component is which.
-![Components](screenshots/components.png)
 
 ## More complex themeing and modifying mappings.scss
 You are really asking for it huh... If you continue you should have at least a decent understanding of css and css selectors, and possibly scss as well.

@@ -1,80 +1,71 @@
-## Why
-We are annoyed at the lack of desktop app for voice, like hangouts had.
+# GVoicePlus
 
-## What does it do
-It just lets you keep voice open without a chrome browser. It will also check the dom for notifications and display a badge in the task bar and closing the app will send it to a tray instead of closing.
+An unofficial desktop app for Google Voice, with a Mac focus. It keeps Google Voice open in its own window, with a tray/menu bar icon, unread badge, notifications, themes and a few extras.
 
-## Supported Operating Systems
-This is a fork of the original repo. This fork is currently maintained for Windows only and still accepts PRs and is being updated. 
+**GVoicePlus is not affiliated with, endorsed by, or sponsored by Google.** "Google" and "Google Voice" are trademarks of Google LLC. You sign in with your own Google account, and the app loads the normal Google Voice website.
 
-The [Original Repo](https://github.com/Jerrkawz/google-voice-desktop-app/) supports both OSX, Windows 10 & Linux.
+This is a fork of [latin-programmer/google-voice-desktop-app](https://github.com/latin-programmer/google-voice-desktop-app), which is itself a fork of the original [Jerrkawz/google-voice-desktop-app](https://github.com/Jerrkawz/google-voice-desktop-app). See [Credits](#credits).
 
-Questions? Ideas? Join us in discord https://discord.gg/3SSS6vkKET
+## What it adds
 
-## Installation
-[Releases Page](https://github.com/latin-programmer/google-voice-desktop-app/releases)
+- **Themes:** Material-style colours in Dark and Light, plus the classic themes (Dracula, Solar, Minty, Cerulean, DarkPlus). Pick one in Settings > Appearance.
+- **App icon:** 13 colours of one speech-bubble icon, or choose your own image (PNG, JPG or `.icns`). Settings > Appearance.
+- **Zoom:** a zoom box in Settings > Appearance. The zoom keys (Cmd/Ctrl +, -, 0) always change the main window, and the box follows them.
+- **Top bar:** click a picture of Google Voice's top bar to hide or show its items (menu, logo, search, status, Upgrade, audio, help, settings, apps, account). Settings > Layout.
+- **Sidebars:** hide the dialer sidebar, collapse the main sidebar, or collapse it and show it again when you hover. Settings > Layout.
+- **Notifications:** reply straight from a notification.
+- **Verification codes:** copy a 6+ digit code from a text to the clipboard, and mark that thread read afterwards. Turn on "Copy verification codes" in Settings > General.
+- **Updates:** an optional notify-only check ("Tell me about updates"). It tells you when a new release exists and never installs anything.
+- **Mac extras:** a menu bar icon with an unread dot.
+- **Also:** paste or drag-and-drop images into a message, start at logon, start minimized to the tray, spell checking, and a Settings window that sizes itself to fit.
 
-For Mac and Linux support, you can use an older version of the app (the original) at: [Releases Page](https://github.com/Jerrkawz/google-voice-desktop-app/releases) and download the release for your OS. In the original version, simply uzip and drag into the applications folder (mac) or run the executable (windows) or run the app image (ubuntu)
+## Install (Mac, Apple Silicon)
 
-**Mac Note: The mac version is unsigned, so you will have to click "Open Anyway" after running, or go to Settings > Security & Privacy > General > Open Anyway. The original author did not want to pay for a dev license just for this**
+1. Download the latest `.dmg` or `.zip` from the [Releases page](https://github.com/lazyb5/GVoicePlus/releases).
+2. Drag **GVoicePlus** into your Applications folder.
+3. The app is not signed with an Apple developer certificate, so macOS will block the first launch. Run this once in Terminal, then open the app:
 
-**Linux Note: You will have to make the AppImage executable in order to run it. Right Click > Properties > Permissions > Allow Executing file as a program**
+   ```
+   xattr -dr com.apple.quarantine "/Applications/GVoicePlus.app"
+   ```
 
-## Customize
-You can change settings, apply themes and other things in the customization page. Go to `Electron > Settings` on Mac in the global menu bar, or `File > Settings` on windows. If you've hidden the menu bar you can also access the settings from the system tray.
+   Or open System Settings > Privacy & Security and click "Open Anyway".
 
-**Windows Settings**
+## Platforms
 
-![Windows Settings](/screenshots/windowsSettings.png?raw=true)
+- **macOS (Apple Silicon):** the main target, and the only platform I test on.
+- **Windows and Linux:** the code comes from a cross-platform project and may work, but I have not tested my changes there. If you try it, please open an issue and tell me how it went.
 
-**Mac Settings**
+## Settings
 
-![Mac Settings](/screenshots/macSettings.png?raw=true)
+Open **GVoicePlus > Settings** in the Mac menu bar (or `File > Settings` on Windows). If you've hidden the menu bar, use the tray icon.
 
-**System Tray Settings**
+- **General:** menu bar, start at logon, start minimized, exit on close, spelling, verification codes, update notices.
+- **Appearance:** theme, zoom, app icon.
+- **Layout:** top bar items and sidebars.
 
-![System Tray Settings](/screenshots/systemTraySettings.png?raw=true)
+Want to make a theme? See [THEMES.md](THEMES.md).
 
-## Themes
-The latest version now supports custom themes, which can be set in the Settings dialog.
+## Run from source
 
-Not only themes but also a system for themeing! If you want to create your own theme and contribute back to the project you can do that [here](THEMES.md).
+```
+git clone https://github.com/lazyb5/GVoicePlus.git
+cd GVoicePlus
+npm install
+npm start
+```
 
-## Run From Source
-`git clone git@github.com:latin-programmer/google-voice-desktop-app.git`
+Tests: `npm test`. To build the app yourself: `npm run build:mac` (or `build:windows`, `build:linux`).
 
-`npm install`
+## Privacy
 
-`npm start`
+Your sign-in and settings are stored on your computer. Besides Google Voice itself, the only network request this fork adds is the optional update check, which asks GitHub for the latest release of this repository.
 
-To build yourself you can run
-`npm run build:windows` or `npm run build:mac` or `npm run build:linux`
+## Credits
 
-Note: the current maintainer is only able to do windows builds. If you would like, you can review what is needed for the mac and linux versions and help out with those (basically, for mac you need a Mac, and for Linux you need a Linux VM).
+- [Jerrkawz](https://github.com/Jerrkawz/google-voice-desktop-app/), who did almost all of the work on the original app.
+- [latin-programmer](https://github.com/latin-programmer/google-voice-desktop-app), who maintains the fork this one is based on.
+- Everyone who contributed to those projects.
+- Themes: [Dracula](https://github.com/dracula/dracula-theme), [Bootswatch](https://bootswatch.com/) (Solar, Minty, Cerulean), and [M3 Vibrant](https://github.com/luoshenshi/M3-Vibrant) (MIT).
 
-## Screenshots
-
-**Main window:**
-
-![Windows](/screenshots/windows.png?raw=true)
-
-**Dracula theme:**
-
-![Dracula](/screenshots/dracula.png?raw=true)
-
-**Solar theme:**
-
-![Solar](/screenshots/solar.png?raw=true)
-
-**Minty theme:**
-
-![Minty](/screenshots/minty.png?raw=true)
-
-**Cerulean theme:**
-
-![Cerulean](/screenshots/cerulean.png?raw=true)
-
-## Attributions
-- Jerrkawz, who did almost 100% of the work for the original app: https://github.com/Jerrkawz/google-voice-desktop-app/
-- Dracula: https://github.com/dracula/dracula-theme
-- Solar / Minty / Cerulean: https://bootswatch.com/
+The original project is licensed under ISC (see `package.json`).
