@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Brands the DEV copy of Electron (node_modules/electron/dist/Electron.app) with this app's icon and name, so the Dock,
- * Cmd+Tab and notifications show Google Voice instead of the Electron atom when you run `npm start`.  macOS only.
+ * Cmd+Tab and notifications show GVoicePlus instead of the Electron atom when you run `npm start`.  macOS only.
  * (The packaged app from `npm run build:mac:dir` already has the right icon; this is only for development runs.)
  *
  *   node scripts/brand-dev-electron.js [path/to/Electron.app]
@@ -32,7 +32,7 @@ try {
         try { execFileSync('/usr/libexec/PlistBuddy', ['-c', command, plist], { stdio: 'ignore' }); return true; } catch (e) { return false; }
     };
     ['CFBundleDisplayName', 'CFBundleName'].forEach((key) => {
-        if (!plistBuddy(`Set :${key} Google Voice`)) { plistBuddy(`Add :${key} string Google Voice`); }
+        if (!plistBuddy(`Set :${key} GVoicePlus`)) { plistBuddy(`Add :${key} string GVoicePlus`); }
     });
 
     // The bundle's contents changed, so re-sign it (ad hoc) or macOS may refuse to launch it.

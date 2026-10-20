@@ -1,11 +1,11 @@
 {
   "name": "voice-desktop-app",
   "version": "2025.102.101",
-  "description": "An electron shell wrapper for the google voice app",
+  "description": "Unofficial desktop app for Google Voice (not affiliated with Google)",
   "main": "src/main.js",
   "build": {
-    "appId": "com.jerrkawz.voiceDesktop",
-    "productName": "Voice Desktop",
+    "appId": "com.gvoiceplus.desktop",
+    "productName": "GVoicePlus",
     "mac": {
       "category": "public.app-category.social-networking",
       "extendInfo": {
