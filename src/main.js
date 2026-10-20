@@ -812,19 +812,6 @@ function hiddenTopBarItems() {
     return prefs.hideUpgradeButton ? ['upgrade'] : [];
 }
 
-// "Choose which items to show" in Settings: close Settings, then let the user click items in the top bar to hide/show them.
-ipcMain.on('topbar-edit', async () => {
-    if (settingsWindow && !settingsWindow.isDestroyed()) { settingsWindow.close(); }
-    showMainWindow();
-    const result = await topBar.edit(win, hiddenTopBarItems());
-    if (result && result.status === 'done') {
-        const prefs = store.get('prefs') || {};
-        prefs.hiddenTopBarItems = result.hidden;
-        delete prefs.hideUpgradeButton;
-        store.set('prefs', prefs);
-    }
-});
-
 // Which top-bar items exist on this account's page (null = unknown), so Settings can grey out the ones that don't.
 ipcMain.handle('get-topbar-present', () => topBar.present(win));
 
