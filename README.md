@@ -16,8 +16,8 @@ This is a fork of [latin-programmer/google-voice-desktop-app](https://github.com
 - **Notifications:** reply straight from a notification.
 - **Verification codes:** copy a 6+ digit code from a text to the clipboard, and mark that thread read afterwards. Turn on "Copy verification codes" in Settings > General.
 - **Updates:** an optional notify-only check ("Tell me about updates"). It tells you when a new release exists and never installs anything.
-- **Mac extras:** a menu bar icon with an unread dot.
-- **Also:** paste or drag-and-drop images into a message, start at logon, start minimized to the tray, spell checking, and a Settings window that sizes itself to fit.
+- **Images:** paste or drag-and-drop images into a message.
+- **Also:** start at logon, start minimized to the tray, and spell checking.
 
 ## Install (Mac, Apple Silicon)
 
