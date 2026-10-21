@@ -228,9 +228,13 @@ module.exports.init = function ({ getWindow, onMessage }) {
             if (!event.sender.isDestroyed()) { event.sender.send('gv-notify-click', id); }
         });
 
+        let lastReply = { text: '', at: 0 };
         n.on('reply', (_e, replyText) => {
             const text = (replyText || '').trim();
             if (!text) { return; }
+            // Windows can report the same reply twice; never send the same text twice from one notification within a few seconds.
+            if (text === lastReply.text && Date.now() - lastReply.at < 5000) { console.log(`${ts()} [reply] duplicate event ignored`); return; }
+            lastReply = { text, at: Date.now() };
             const queuedAt = Date.now();
             const w = getWindow();
             console.log(`${ts()} [reply] event received (${text.length} chars) visible=${!!w && w.isVisible()} minimized=${!!w && w.isMinimized()} focused=${!!w && w.isFocused()}`);

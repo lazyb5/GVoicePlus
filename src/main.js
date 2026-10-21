@@ -1,5 +1,5 @@
 // Requires
-const { app, nativeImage, BrowserWindow, Tray, Menu, ipcMain, BrowserView, shell, powerMonitor, systemPreferences } = require('electron');
+const { app, nativeImage, nativeTheme, BrowserWindow, Tray, Menu, ipcMain, BrowserView, shell, powerMonitor, systemPreferences } = require('electron');
 const constants = require('./constants');
 const AutoLaunch = require('auto-launch')
 const contextMenu = require('electron-context-menu');
@@ -19,7 +19,7 @@ const Url = require('url');
 // Constants
 const store = new Store();
 const codeCopy = require('./utils/codeCopy').init({ getPrefs: () => store.get('prefs') || {} });   // copies verification codes when the setting is on
-require('./utils/replyNotifications').init({ getWindow: () => win, onMessage: (body) => codeCopy.handle(body) });
+require('./utils/replyNotifications').init({ getWindow: () => win, onMessage: (body) => (process.platform === 'win32' ? null : codeCopy.handle(body)) });   // Windows notifications have their own Copy button
 // "Check for updates" (notify only): offers the download page when the GitHub repo in constants.js has a newer release.
 const updates = require('./utils/updateCheck').init({
     getWindow: () => win,
@@ -174,11 +174,20 @@ function themeBackground(theme) {
     return (pal && /^#[0-9a-f]{6}$/i.test(pal.bg)) ? pal.bg : '#ffffff';
 }
 
+// On Windows, make the title bar (and system dialogs) follow the theme's light/dark scheme.  Windows draws the title bar
+// itself, so this is light or dark only, not tinted with the theme's colours.
+function applyNativeScheme(theme) {
+    if (process.platform !== 'win32') { return; }
+    const pal = themePalette.get(appPath, theme);
+    nativeTheme.themeSource = pal ? pal.scheme : 'light';
+}
+
 // Creates and returns this application's main BrowserWindow, navigated to Google Voice.
 function createWindow() {
     // Create the window, making it hidden initially.  If we have
     // it on record, re-apply the window size last set by the user.
     const prefs = store.get('prefs') || {};
+    applyNativeScheme(process.env.GV_THEME || prefs.theme || constants.DEFAULT_SETTING_THEME);
     win = new BrowserWindow({
         width: prefs.windowWidth || DEFAULT_WIDTH,
         height: prefs.windowHeight || DEFAULT_HEIGHT,
@@ -685,6 +694,7 @@ ipcMain.on('pref-change-theme', (event, theme) => {
     const pageTheme = themeForCurrentPage(theme);
     cssInjector.injectTheme(pageTheme);
     accountMenuTheme.apply(win, themePalette.get(appPath, theme));
+    applyNativeScheme(theme);
     const prefs = store.get('prefs') || {};
     prefs.theme = theme;
     store.set('prefs', prefs);

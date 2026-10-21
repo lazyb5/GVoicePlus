@@ -298,6 +298,7 @@
 
     // Set the "copy verification codes" checkbox (off by default); it takes effect immediately.
     const copyCodes = document.getElementById('copy-codes');
+    if (process.platform === 'win32') { document.getElementById('copy-codes-row').style.display = 'none'; }   // Windows notifications have their own Copy button
     copyCodes.checked = !!prefs.copyCodes;
     copyCodes.addEventListener('change', (e) => {
         ipcRenderer.send('pref-change-copy-codes', e.target.checked);
