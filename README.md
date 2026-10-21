@@ -1,4 +1,4 @@
-# GVoicePlus
+<img width="1280" height="640" alt="GVoicePlus banner – Ocean (default)@1x" src="https://github.com/user-attachments/assets/65672bcc-4f87-48ba-a406-0274b3503a1a" />
 
 An unofficial desktop app for Google Voice, with a Mac focus. It keeps Google Voice open in its own window, with a tray/menu bar icon, unread badge, notifications, themes and a few extras.
 
