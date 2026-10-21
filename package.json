@@ -1,6 +1,6 @@
 {
   "name": "voice-desktop-app",
-  "version": "2025.102.101",
+  "version": "1.0.0",
   "description": "Unofficial desktop app for Google Voice (not affiliated with Google)",
   "main": "src/main.js",
   "build": {
@@ -30,6 +30,8 @@
       "!scripts/**",
       "!build/**",
       "!dist/**",
+      "!out/**",
+      "!test/**",
       "!**/*.md",
       "!src/themes/m3-vibrant/color.ini",
       "!screenshots/**"
