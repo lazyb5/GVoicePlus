@@ -35,7 +35,25 @@
       "!**/*.md",
       "!src/themes/m3-vibrant/color.ini",
       "!screenshots/**"
-    ]
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    }
   },
   "scripts": {
     "start": "electron .",
