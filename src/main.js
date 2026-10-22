@@ -126,6 +126,15 @@ contextMenu({
 // to the user.  If we don't do this, "electron.app.Electron" will be displayed instead.
 if (isWindows()){
     app.setAppUserModelId(constants.APPLICATION_NAME);
+
+    // Windows only shows (and reliably delivers) toasts for an app that has a Start Menu shortcut carrying its app ID.
+    // Without one, Windows creates it when the first notification is sent and that first toast can be lost.  Creating
+    // or refreshing the shortcut at startup avoids that.  The shortcut points at this exe and the app ID above.
+    try {
+        const shortcut = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${constants.APPLICATION_NAME}.lnk`);
+        const options = { target: process.execPath, cwd: path.dirname(process.execPath), appUserModelId: constants.APPLICATION_NAME, icon: process.execPath, iconIndex: 0 };
+        shell.writeShortcutLink(shortcut, fs.existsSync(shortcut) ? 'replace' : 'create', options);
+    } catch (e) { console.log(`Could not write the Start Menu shortcut: ${e && e.message}`); }
 }
 
 // Setup notification shim to focus window
