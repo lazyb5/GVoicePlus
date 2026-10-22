@@ -33,12 +33,13 @@ This is a fork of [latin-programmer/google-voice-desktop-app](https://github.com
 
 ## Platforms
 
-- **macOS (Apple Silicon):** the main target, and the only platform I test on.
-- **Windows and Linux:** the code comes from a cross-platform project and may work, but I have not tested my changes there. If you try it, please open an issue and tell me how it went.
+- **macOS (Apple Silicon):** the main target and the best tested.
+- **Windows (x64):** works and has been tested in a virtual machine, not yet on a physical PC. Download `GVoicePlus-Setup-<version>-x64.exe` from Releases and run it. The installer is not code signed, so Windows SmartScreen will warn you: click More info, then Run anyway.
+- **Linux:** not officially tested, and no download is provided. You can build it yourself (see Run from source). Reply from a notification is not expected to work on Linux, and a tray icon on GNOME may need an AppIndicator extension.
 
 ## Settings
 
-Open **GVoicePlus > Settings** in the Mac menu bar (or `File > Settings` on Windows). If you've hidden the menu bar, use the tray icon.
+Open **GVoicePlus > Settings** in the Mac menu bar (or `File > Settings` on Windows and Linux). The tray icon also opens it.
 
 - **General:** menu bar, start at logon, start minimized, exit on close, spelling, verification codes, update notices.
 - **Appearance:** theme, zoom, app icon.
