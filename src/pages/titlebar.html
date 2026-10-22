@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+    <title>GVoicePlus</title>
+    <style>
+        /* Colours come from the query string (see titleBar.js) so the strip is themed from the first paint. */
+        :root { --bg: #ffffff; --fg: #202124; --hover: #e8eaed; }
+        html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
+                     font: 12px "Segoe UI", system-ui, sans-serif; user-select: none; }
+        /* The whole strip drags the window; only the labels are clickable.  The right side is left free for the
+           native minimise / maximise / close buttons that Windows draws over it. */
+        #bar { display: flex; align-items: center; height: 32px; padding: 0 4px;
+               -webkit-app-region: drag; }
+        .menu { -webkit-app-region: no-drag; padding: 0 10px; height: 26px; line-height: 26px; border-radius: 4px;
+                cursor: default; background: transparent; color: inherit; border: 0; font: inherit; }
+        .menu:hover, .menu.open { background: var(--hover); }
+    </style>
+</head>
+<body>
+    <div id="bar">
+        <button class="menu" data-index="0">File</button>
+        <button class="menu" data-index="1">Edit</button>
+        <button class="menu" data-index="2">View</button>
+        <button class="menu" data-index="3">Help</button>
+    </div>
+    <script>
+        const { ipcRenderer } = require('electron');
+
+        const q = new URLSearchParams(location.search);
+        const ok = (v) => /^#[0-9a-f]{6}$/i.test(v || '');
+        if (ok(q.get('bg')))    { document.documentElement.style.setProperty('--bg', q.get('bg')); }
+        if (ok(q.get('fg')))    { document.documentElement.style.setProperty('--fg', q.get('fg')); }
+        if (ok(q.get('hover'))) { document.documentElement.style.setProperty('--hover', q.get('hover')); }
+
+        // The main process re-sends the colours when the theme changes.
+        ipcRenderer.on('titlebar-colours', (_e, c) => {
+            if (!c) { return; }
+            if (ok(c.bg))    { document.documentElement.style.setProperty('--bg', c.bg); }
+            if (ok(c.fg))    { document.documentElement.style.setProperty('--fg', c.fg); }
+            if (ok(c.hover)) { document.documentElement.style.setProperty('--hover', c.hover); }
+        });
+
+        // Clicking a label asks the main process to open the matching menu just under it.
+        document.querySelectorAll('.menu').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const r = btn.getBoundingClientRect();
+                btn.classList.add('open');
+                ipcRenderer.send('titlebar-menu', Number(btn.dataset.index), r.left, r.bottom);
+            });
+        });
+        ipcRenderer.on('titlebar-menu-closed', () => {
+            document.querySelectorAll('.menu.open').forEach((b) => b.classList.remove('open'));
+        });
+    </script>
+</body>
+</html>

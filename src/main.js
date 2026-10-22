@@ -1,6 +1,7 @@
 // Requires
-const { app, nativeImage, nativeTheme, BrowserWindow, Tray, Menu, ipcMain, BrowserView, shell, powerMonitor, systemPreferences } = require('electron');
+const { app, nativeImage, nativeTheme, BrowserWindow, Tray, Menu, ipcMain, BrowserView, WebContentsView, shell, powerMonitor, systemPreferences } = require('electron');
 const constants = require('./constants');
+const titleBar = require('./utils/titleBar');
 const AutoLaunch = require('auto-launch')
 const contextMenu = require('electron-context-menu');
 const BadgeGenerator = require('./badge_generator');
@@ -19,7 +20,7 @@ const Url = require('url');
 // Constants
 const store = new Store();
 const codeCopy = require('./utils/codeCopy').init({ getPrefs: () => store.get('prefs') || {} });   // copies verification codes when the setting is on
-require('./utils/replyNotifications').init({ getWindow: () => win, onMessage: (body) => (process.platform === 'win32' ? null : codeCopy.handle(body)) });   // Windows notifications have their own Copy button
+require('./utils/replyNotifications').init({ getWindow: () => page, onMessage: (body) => (process.platform === 'win32' ? null : codeCopy.handle(body)) });   // Windows notifications have their own Copy button
 // "Check for updates" (notify only): offers the download page when the GitHub repo in constants.js has a newer release.
 const updates = require('./utils/updateCheck').init({
     getWindow: () => win,
@@ -96,6 +97,8 @@ let badgeGenerator;
 let cssInjector;
 let tray;
 let win;            // The main application window
+let page;           // The Google Voice page: win itself on macOS; on Windows/Linux the view under the title bar (window calls go to win)
+let appMenu;        // The application menu (File / Edit / View / Help), shown by the custom title bar on Windows/Linux
 let settingsWindow; // When not null, the "Settings" window, which is currently open
 
 // Only one instance of the app should run
@@ -161,7 +164,7 @@ app.whenReady().then(() => {
 // (the landing page, accounts.google.com) are left unthemed so they look normal.
 function themeForCurrentPage(theme) {
     let url = '';
-    try { url = win.webContents.getURL(); } catch (e) { /* window gone */ }
+    try { url = page.webContents.getURL(); } catch (e) { /* window gone */ }
     const isApp = /^https:\/\/voice\.google\.com\/u\/\d+(\/|$)/.test(url);
     console.log(`Page ${url} -> ${isApp ? `theme ${theme}` : 'unthemed'}`);
     return isApp ? theme : 'default';
@@ -188,13 +191,8 @@ function createWindow() {
     // it on record, re-apply the window size last set by the user.
     const prefs = store.get('prefs') || {};
     applyNativeScheme(process.env.GV_THEME || prefs.theme || constants.DEFAULT_SETTING_THEME);
-    win = new BrowserWindow({
-        width: prefs.windowWidth || DEFAULT_WIDTH,
-        height: prefs.windowHeight || DEFAULT_HEIGHT,
-        backgroundColor: themeBackground(process.env.GV_THEME || prefs.theme || constants.DEFAULT_SETTING_THEME),
-        icon: icons.window,
-        show: false,
-        webPreferences: {
+    const startTheme = process.env.GV_THEME || prefs.theme || constants.DEFAULT_SETTING_THEME;
+    const pagePrefs = {
             spellcheck: prefs.spellcheck !== false,   // on by default; costs ~30 MB, can be switched off in Settings (restart to apply)
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: true,
@@ -202,12 +200,45 @@ function createWindow() {
             // The window is only hidden (not closed) when you dismiss it.  Chromium slows a hidden page's timers to
             // ~1/s, then ~1/min, which stalls inline replies and the unread watcher until the window is reopened.
             backgroundThrottling: false
-        }
+    };
+    win = new BrowserWindow({
+        ...(titleBar.enabled() ? titleBar.windowOptions(themePalette.get(appPath, startTheme)) : {}),
+        width: prefs.windowWidth || DEFAULT_WIDTH,
+        height: prefs.windowHeight || DEFAULT_HEIGHT,
+        backgroundColor: themeBackground(process.env.GV_THEME || prefs.theme || constants.DEFAULT_SETTING_THEME),
+        icon: icons.window,
+        show: false,
+        // Windows/Linux: the window itself only shows the title bar strip; Google Voice lives in a view below it.
+        webPreferences: titleBar.enabled() ? { nodeIntegration: true, contextIsolation: false, backgroundThrottling: false } : pagePrefs
     })
-    if (process.env.GV_DEVTOOLS) { win.webContents.openDevTools({ mode: 'detach' }); }
+    page = win;
+    if (titleBar.enabled()) {
+        const view = new WebContentsView({ webPreferences: pagePrefs });
+        view.setBackgroundColor(themeBackground(startTheme));
+        win.contentView.addChildView(view);
+        const layoutPage = () => {
+            if (win.isDestroyed()) { return; }
+            const [w, h] = win.getContentSize();
+            const top = win.isFullScreen() ? 0 : titleBar.HEIGHT;   // full screen: the strip is hidden, the page fills the window
+            view.setBounds({ x: 0, y: top, width: w, height: Math.max(0, h - top) });
+        };
+        ['resize', 'maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen', 'show', 'restore'].forEach((ev) => win.on(ev, layoutPage));
+        layoutPage();
+        win.on('focus', () => { if (!win.isDestroyed()) { view.webContents.focus(); } });   // typing goes to Google Voice, not the strip
+        page = new Proxy(win, {
+            get(target, prop) {
+                if (prop === 'webContents') { return view.webContents; }
+                if (prop === 'loadURL') { return (...args) => view.webContents.loadURL(...args); }
+                const v = target[prop];
+                return typeof v === 'function' ? v.bind(target) : v;
+            }
+        });
+        win.loadFile(titleBar.pageFile(), { query: titleBar.pageQuery(themePalette.get(appPath, startTheme)) });
+    }
+    if (process.env.GV_DEVTOOLS) { page.webContents.openDevTools({ mode: 'detach' }); }
 
     // Create the window's menu bar.
-    let menuBar = Menu.buildFromTemplate([
+    let menuBar = appMenu = Menu.buildFromTemplate([
         {
             label: '&File',
             submenu: [
@@ -250,9 +281,7 @@ function createWindow() {
                 {label: 'Zoom Out', visible: false, accelerator: 'CommandOrControl+Shift+_', click: () => {zoomMainWindow(-0.5);}}, // Zoom out (Ctrl+Shift+_)
                 {label: 'Actual Size', accelerator: 'CommandOrControl+0',                  click: () => {setMainZoom(0);}},        // Reset zoom (Ctrl+0)
                 {type:  'separator'},
-                {role:  'toggleFullScreen'},                                                 // Toggle full screen (F11)
-                {type:  'separator'},
-                {label: '&Hide menu bar', visible: !isMac(), click: () => {win.setMenuBarVisibility(false);}} // Hide the menu bar (not supported for Mac)
+                {role:  'toggleFullScreen'}                                                  // Toggle full screen (F11)
             ]
         },
         {
@@ -277,13 +306,10 @@ function createWindow() {
         Menu.setApplicationMenu(menuBar) // On Mac, we always show the menu bar
     }
     else {
-        // On Windows/Linux, we give the user a setting for hiding the menu bar.  Add the menu bar to
-        // the window (which ensures that its keyboard shortcuts will work regardless of the menu bar's
-        // visibility), but make the menu bar visible only if the user hasn't asked us to hide it.
+        // On Windows/Linux the menus are shown by the custom title bar strip.  The menu is still attached to the window so
+        // its keyboard shortcuts work, but the native menu bar itself is never shown.
         win.setMenu(menuBar);
-        if (((prefs.showMenuBar != undefined) && !prefs.showMenuBar) || !constants.DEFAULT_SETTING_SHOW_MENU_BAR) {
-            win.setMenuBarVisibility(false);
-        }
+        win.setMenuBarVisibility(false);
     }
 
     // Navigate the window to Google Voice.  When it finishes loading, modify Google's markup as needed
@@ -292,29 +318,29 @@ function createWindow() {
 
     // Apply the theme as soon as the page's DOM exists (dom-ready), which is well before the page has finished
     // loading, so the page is never seen unthemed.  GV_THEME=<name> npm start overrides the saved theme (handy for testing).
-    win.webContents.on('dom-ready', () => {
+    page.webContents.on('dom-ready', () => {
         const theme = process.env.GV_THEME || store.get('prefs.theme') || constants.DEFAULT_SETTING_THEME;
-        cssInjector = new CSSInjector(app, win);
+        cssInjector = new CSSInjector(app, page);
         cssInjector.injectTheme(themeForCurrentPage(theme))
             // The preload script already applied the theme before first paint; drop that copy now that this one is in.
-            .then(() => win.webContents.executeJavaScript("var e = document.getElementById('gv-early-theme'); if (e) { e.remove(); }"))
+            .then(() => page.webContents.executeJavaScript("var e = document.getElementById('gv-early-theme'); if (e) { e.remove(); }"))
             .catch(() => {});
     });
 
-    win.webContents.on('did-finish-load', () => {
+    page.webContents.on('did-finish-load', () => {
         const hideDialerSidebar = store.get('prefs.hideDialerSidebar') || constants.DEFAULT_HIDE_DIALER_SIDEBAR;
         cssInjector.showHideDialerSidebar(hideDialerSidebar);
-        topBar.apply(win, hiddenTopBarItems());
-        unreadWatcher.start(win);
-        imagePaste.start(win);
+        topBar.apply(page, hiddenTopBarItems());
+        unreadWatcher.start(page);
+        imagePaste.start(page);
     });
 
     // The profile-picture dropdown is a separate embedded page, so it is themed on its own (accountMenuTheme.js).  It loads
     // after the main page and may reload later, so every sub-frame that finishes loading triggers this.
-    win.webContents.on('did-frame-finish-load', (event, isMainFrame) => {
+    page.webContents.on('did-frame-finish-load', (event, isMainFrame) => {
         if (isMainFrame) { return; }
         const theme = process.env.GV_THEME || store.get('prefs.theme') || constants.DEFAULT_SETTING_THEME;
-        accountMenuTheme.apply(win, themePalette.get(appPath, theme));
+        accountMenuTheme.apply(page, themePalette.get(appPath, theme));
     });
 
     // Create our system notification area icon.
@@ -323,12 +349,12 @@ function createWindow() {
     }
     tray = createTray(icons.tray, constants.APPLICATION_NAME);
 
-    badgeGenerator = new BadgeGenerator(win);
+    badgeGenerator = new BadgeGenerator(page);
 
     // NOTE: Electron 22+ removed the old 'new-window' event, so this must use setWindowOpenHandler.  With the old
     // handler, every link the page opened in a new window (e.g. Google Voice's own Settings) spawned a second,
     // unthemed window instead of being routed here.
-    win.webContents.setWindowOpenHandler(({ url }) => {
+    page.webContents.setWindowOpenHandler(({ url }) => {
 
         // If the target URL is a Google Voice URL, have our main window navigate to it instead of opening
         // it in a new window.  This supports the ability to add additional accounts and switch between
@@ -339,7 +365,7 @@ function createWindow() {
         // item in the notification area icon context menu to get back to the Google Voice home page.
         const hostName = Url.parse(url).hostname;
         if ( hostName === 'voice.google.com' || hostName === 'accounts.google.com') {
-            win && win.loadURL(url);
+            page && page.loadURL(url);
         }
         else {
             shell.openExternal(url);
@@ -372,7 +398,7 @@ function createWindow() {
     // If Google Voice's page has a "beforeunload" handler (for example while there is an unsent draft in the message
     // box), Electron silently cancels the quit and the app appears impossible to close.  When the user has asked to
     // exit, ignore that handler so the quit goes through.
-    win.webContents.on('will-prevent-unload', (event) => {
+    page.webContents.on('will-prevent-unload', (event) => {
         if (app.isQuiting) { event.preventDefault(); }
     });
 
@@ -403,7 +429,7 @@ function exitApplication() {
 // load, Google Voice itself takes care of asking the user to log in when necessary.
 function loadGoogleVoice(loadExternal=false) {
     if (loadExternal) {shell.openExternal(constants.URL_GOOGLE_VOICE);}
-    else              {win && win.loadURL(constants.URL_GOOGLE_VOICE);}
+    else              {page && page.loadURL(constants.URL_GOOGLE_VOICE);}
 }
 
 // Invoked every "REFRESH_RATE" seconds.  Parses the current notification count from Google
@@ -416,7 +442,7 @@ function updateNotifications(app) {
 
     // Safety net for the instant updates from unreadWatcher.  Returns null when the page isn't ready (loading, signed
     // out), in which case we keep the last known count instead of treating it as "zero unread".
-    win.webContents.executeJavaScript(unreadWatcher.COUNT_EXPR).then(count => {
+    page.webContents.executeJavaScript(unreadWatcher.COUNT_EXPR).then(count => {
         if (count === null) { return; }
         processNotificationCount(app, count);
     }).catch(() => {});
@@ -432,7 +458,7 @@ function updateNotifications(app) {
     // has become empty.  If it has, then we automatically reload Google Voice for the
     // user.  This seems to eliminate the problem entirely, without any adverse effects,
     // as once we detect an empty body, the application is already in a non-working state.
-    win.webContents.executeJavaScript("document.querySelector('body').childNodes.length").then(
+    page.webContents.executeJavaScript("document.querySelector('body').childNodes.length").then(
         (result) => {
             if (result === 0){
                 loadGoogleVoice();
@@ -544,7 +570,7 @@ function releaseButtonFocus() {
             a.blur();
             return 'released';
         })()`;
-        for (const frame of win.webContents.mainFrame.framesInSubtree) {
+        for (const frame of page.webContents.mainFrame.framesInSubtree) {
             frame.executeJavaScript(script).catch(() => { /* frame went away */ });
         }
     } catch (e) { console.log('Releasing focus failed:', e.message); }
@@ -554,10 +580,10 @@ function releaseButtonFocus() {
 // Settings window, so its zoom box always shows the real level.
 function setMainZoom(level) {
     level = Math.min(8.8, Math.max(-7.6, level));
-    win.webContents.setZoomLevel(level);
+    page.webContents.setZoomLevel(level);
     if (settingsWindow && !settingsWindow.isDestroyed()) { settingsWindow.webContents.send('zoom-level-changed', level); }
 }
-function zoomMainWindow(step) { setMainZoom(win.webContents.getZoomLevel() + step); }
+function zoomMainWindow(step) { setMainZoom(page.webContents.getZoomLevel() + step); }
 
 // Creates (if it doesn't already exist) this application's "Settings" window, and then displays it to the user.
 function showSettingsWindow() {
@@ -651,7 +677,7 @@ ipcMain.handle('get-start-automatically', async () => {
 
 // Returns the current zoom level of this this application's main window.
 ipcMain.handle('get-zoom-level', () => {
-    return win.webContents.getZoomLevel();
+    return page.webContents.getZoomLevel();
 });
 
 // ====================================================================================================================
@@ -693,8 +719,13 @@ ipcMain.on('pref-change-theme', (event, theme) => {
     // Apply the selected them and then save the selection to the user's settings store.
     const pageTheme = themeForCurrentPage(theme);
     cssInjector.injectTheme(pageTheme);
-    accountMenuTheme.apply(win, themePalette.get(appPath, theme));
+    accountMenuTheme.apply(page, themePalette.get(appPath, theme));
     applyNativeScheme(theme);
+    if (titleBar.enabled()) {
+        const pal = themePalette.get(appPath, theme);
+        titleBar.applyOverlay(win, pal);
+        win.webContents.send('titlebar-colours', titleBar.colours(pal));
+    }
     const prefs = store.get('prefs') || {};
     prefs.theme = theme;
     store.set('prefs', prefs);
@@ -710,12 +741,21 @@ ipcMain.on('pref-change-zoom', (event, zoomLevel) => {
     setMainZoom(parseFloat(zoomLevel));
 });
 
+// A label in the custom title bar was clicked: open that menu as a native popup under it.
+ipcMain.on('titlebar-menu', (e, index, x, y) => {
+    titleBar.popupMenu(win, appMenu, index, x, y, () => {
+        if (win.isDestroyed()) { return; }
+        win.webContents.send('titlebar-menu-closed');
+        page.webContents.focus();
+    });
+});
+
 // Called when the "show menu bar" checkbox has been checked/unchecked.
 ipcMain.on('pref-change-show-menubar', (e, showMenuBar) => {
     console.log(`"Show menu bar changed to: ${showMenuBar}`);
     
     // Apply the new value and then save it to the user's settings store.
-    win.setMenuBarVisibility(showMenuBar);
+    if (!titleBar.enabled()) { win.setMenuBarVisibility(showMenuBar); }
     const prefs = store.get('prefs') || {};
     prefs.showMenuBar = showMenuBar;
     store.set('prefs', prefs);
@@ -814,7 +854,7 @@ ipcMain.on('pref-change-hover-side-nav', (e, hover) => {
     const prefs = store.get('prefs') || {};
     prefs.hoverSideNav = !!hover;
     store.set('prefs', prefs);
-    sideNav.setHover(win, prefs.hoverSideNav);
+    sideNav.setHover(page, prefs.hoverSideNav);
 });
 
 // Called when the "collapse sidebar" checkbox has been checked/unchecked.  Collapses (or re-opens) it right away.
@@ -822,7 +862,7 @@ ipcMain.on('pref-change-collapse-side-nav', (e, collapse) => {
     const prefs = store.get('prefs') || {};
     prefs.collapseSideNav = !!collapse;
     store.set('prefs', prefs);
-    sideNav.setCollapsed(win, prefs.collapseSideNav);
+    sideNav.setCollapsed(page, prefs.collapseSideNav);
 });
 
 // Called when the "hide dialer sidebar" checkbox has been checked/unchecked.
@@ -846,7 +886,7 @@ function hiddenTopBarItems() {
 }
 
 // Which top-bar items exist on this account's page (null = unknown), so Settings can grey out the ones that don't.
-ipcMain.handle('get-topbar-present', () => topBar.present(win));
+ipcMain.handle('get-topbar-present', () => topBar.present(page));
 
 // The top-bar picture in Settings: save which items are hidden and apply it to the open page straight away.
 ipcMain.on('pref-change-topbar-hidden', (e, keys) => {
@@ -856,7 +896,7 @@ ipcMain.on('pref-change-topbar-hidden', (e, keys) => {
     prefs.hiddenTopBarItems = hidden;
     delete prefs.hideUpgradeButton;
     store.set('prefs', prefs);
-    topBar.apply(win, hidden);
+    topBar.apply(page, hidden);
 });
 
 // Unread count pushed by the page the moment it changes.
