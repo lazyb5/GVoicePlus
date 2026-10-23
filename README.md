@@ -14,7 +14,7 @@ This is a fork of [latin-programmer/google-voice-desktop-app](https://github.com
 - **Top bar:** click a picture of Google Voice's top bar to hide or show its items (menu, logo, search, status, Upgrade, audio, help, settings, apps, account). Settings > Layout.
 - **Sidebars:** hide the dialer sidebar, collapse the main sidebar, or collapse it and show it again when you hover. Settings > Layout.
 - **Notifications:** reply straight from a notification.
-- **Verification codes:** copy a 4 to 8 digit code from a text to the clipboard (without any letters, like the G- in Google codes). For codes of 6 or more digits it also marks the thread read afterwards. Turn on "Copy verification codes" in Settings > General.
+- **Verification codes:** copy a 4 to 8 digit code from a text to the clipboard (without any letters, like the G- in Google codes). For codes of 6 or more digits it also marks the thread read afterwards. Mac only. Turn on "Copy verification codes" in Settings > General.
 - **Updates:** an optional notify-only check ("Tell me about updates"). It tells you when a new release exists and never installs anything.
 - **Images:** paste or drag-and-drop images into a message.
 - **Also:** start at logon, start minimized to the tray, and spell checking.

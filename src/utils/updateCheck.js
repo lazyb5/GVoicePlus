@@ -1,6 +1,6 @@
 /**********************************************************************************************************************
  * "Check for updates" (notify only): asks GitHub for the repository's latest release and, if it is newer than this
- * app, offers to open its download page.  Nothing is downloaded or installed by the app itself (that would need Apple
+ * app AND has a download for this system, offers to open its download page.  Nothing is downloaded or installed by the app itself (that would need Apple
  * code signing), and nothing is sent except the plain public request for the latest release.
  *
  * The repository is set by UPDATE_CHECK_REPO in constants.js ("owner/name").  While it is empty, nothing happens.
@@ -26,6 +26,15 @@ function isNewer(latest, current) {
     return false;
 }
 
+// A release only counts as an update if it has a file for this system, so a Mac-only release never bothers a Windows
+// user (and the other way round).  Linux has no download, so it is never told about updates.
+const FILE_FOR = { darwin: /\.(dmg|zip)$/i, win32: /\.exe$/i };
+
+function hasFileFor(assets, platform) {
+    const wanted = FILE_FOR[platform];
+    return !!wanted && Array.isArray(assets) && assets.some((a) => wanted.test(String((a && a.name) || '')));
+}
+
 async function fetchLatest(repo) {
     const res = await net.fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
         headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'voice-desktop-update-check' }
@@ -34,7 +43,7 @@ async function fetchLatest(repo) {
     const release = await res.json();
     // Only ever open a github.com page.
     const url = /^https:\/\/github\.com\//.test(release.html_url || '') ? release.html_url : `https://github.com/${repo}/releases`;
-    return { version: String(release.tag_name || ''), url };
+    return { version: String(release.tag_name || ''), url, assets: release.assets };
 }
 
 function init({ getWindow, getPrefs, setPref }) {
@@ -64,6 +73,12 @@ function init({ getWindow, getPrefs, setPref }) {
             if (manual) { await say({ message: `You are up to date (v${app.getVersion()}).` }); }
             return;
         }
+        if (!hasFileFor(latest.assets, process.platform)) {
+            // Newer release, but nothing to download for this system yet.  Stay quiet; the daily check will notice
+            // when the file is added.
+            if (manual) { await say({ message: `No new download for your system yet (you have v${app.getVersion()}).` }); }
+            return;
+        }
         // The automatic check asks only once per new version, so it never nags.
         if (!manual && getPrefs().lastUpdatePrompt === latest.version) { return; }
         setPref('lastUpdatePrompt', latest.version);
@@ -82,4 +97,4 @@ function init({ getWindow, getPrefs, setPref }) {
     return { checkNow: () => check(true) };
 }
 
-module.exports = { init, isNewer };
+module.exports = { init, isNewer, hasFileFor };
