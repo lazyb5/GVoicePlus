@@ -29,8 +29,6 @@ This is a fork of [latin-programmer/google-voice-desktop-app](https://github.com
    xattr -dr com.apple.quarantine "/Applications/GVoicePlus.app"
    ```
 
-   Or open System Settings > Privacy & Security and click "Open Anyway".
-
 ## Platforms
 
 - **macOS (Apple Silicon):** the main target and the best tested.
