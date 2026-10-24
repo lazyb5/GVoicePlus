@@ -204,8 +204,11 @@ function createWindow() {
     const pagePrefs = {
             spellcheck: prefs.spellcheck !== false,   // on by default; costs ~30 MB, can be switched off in Settings (restart to apply)
             preload: path.join(__dirname, 'preload.js'),
-            nodeIntegration: true,
-            contextIsolation: false,
+            // Google's page gets no Node and runs in its own world; only preload.js (sandbox is off so it can load our own
+            // files) reaches the app, through a few small contextBridge hooks.
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: false,
             // The window is only hidden (not closed) when you dismiss it.  Chromium slows a hidden page's timers to
             // ~1/s, then ~1/min, which stalls inline replies and the unread watcher until the window is reopened.
             backgroundThrottling: false

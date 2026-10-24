@@ -1,13 +1,16 @@
 /**********************************************************************************************************************
  * Replaces the page's "Notification" class with a stand-in that forwards each notification to the main process,
  * where it is shown as a native Electron notification with an inline reply field (macOS).  Clicks are relayed
- * back so the page's own handlers still run, and the existing "notification-clicked" event is still sent.
+ * back so the page's own handlers still run.
+ *
+ * This function runs inside Google's page (its own JavaScript world), NOT in the preload script, so it has no access to
+ * Node or Electron.  preload.js injects its source with webFrame.executeJavaScript and hands it `bridge`, a small object
+ * made with contextBridge (notify / close / onClick).  Keep it self-contained: it must not refer to anything outside
+ * itself, because only the function's text is injected.
  **********************************************************************************************************************/
 
-const { ipcRenderer } = require('electron');
-
-module.exports.notificationShim = function (appPath) {
-    const OldNotification = Notification;
+module.exports.notificationShim = function (bridge) {
+    const OldNotification = window.Notification;
     const live = new Map();
     let nextId = 1;
 
@@ -26,17 +29,17 @@ module.exports.notificationShim = function (appPath) {
             if (live.size > 50) { live.delete(live.keys().next().value); }
             live.set(this._id, this);
 
-            ipcRenderer.send('gv-notify', {
+            bridge.notify({
                 id: this._id,
                 title: this.title,
-                body: this.body,
-                tag: this.tag,
+                body: String(this.body),
+                tag: String(this.tag),
                 silent: !!options.silent
             });
         }
 
         close() {
-            ipcRenderer.send('gv-notify-close', this._id);
+            bridge.close(this._id);
             live.delete(this._id);
         }
 
@@ -45,7 +48,7 @@ module.exports.notificationShim = function (appPath) {
     }
 
     // The main process tells us when the user clicked the notification body.
-    ipcRenderer.on('gv-notify-click', (_event, id) => {
+    bridge.onClick((id) => {
         const n = live.get(id);
         if (n) {
             const evt = new Event('click');
@@ -53,8 +56,7 @@ module.exports.notificationShim = function (appPath) {
             if (typeof n.onclick === 'function') { n.onclick(evt); }
             live.delete(id);
         }
-        ipcRenderer.send('notification-clicked', {});
     });
 
-    Notification = ShimNotification;
+    window.Notification = ShimNotification;
 };
