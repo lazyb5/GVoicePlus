@@ -80,6 +80,9 @@ function pageTopBar() {
 const SOURCE = `(${pageTopBar.toString()})();`;
 module.exports.SOURCE = SOURCE;   // exported for testing
 
+// The item keys above, so the main process can drop any other key it is sent (test/topBar.test.js checks the two lists match).
+module.exports.KEYS = ['menu', 'logo', 'search', 'status', 'upgrade', 'audio', 'help', 'settings', 'apps', 'account'];
+
 // Hides the given item keys in the main window (and keeps them hidden).
 module.exports.apply = function (win, keys) {
     if (!win || win.isDestroyed()) { return; }

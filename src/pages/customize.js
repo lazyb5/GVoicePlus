@@ -1,6 +1,9 @@
 (async function() {
-    const { ipcRenderer } = require('electron');
-    const constants = require('../constants')
+    // The page has no Node and no Electron: everything it needs comes from the few named methods in window.gvSettings
+    // (src/settingsPreload.js).
+    const api = window.gvSettings;
+    const init = await api.getInit();
+    const constants = init.defaults;
 
     // Allow the user to hit the Escape key to close the window.
     window.addEventListener('keyup', (event) => {
@@ -10,12 +13,12 @@
     }, true);
     
     // Retrieve the user's settings store from the main process.
-    const prefs = await ipcRenderer.invoke('get-user-prefs');
+    const prefs = init.prefs;
 
     // Match this window to the selected theme (see the "themed" rules in customize.css).
     const applyPalette = async (theme) => {
         let pal = null;
-        try { pal = await ipcRenderer.invoke('get-theme-palette', theme); } catch (e) { /* older main process: just keep the normal look */ }
+        try { pal = await api.getThemePalette(theme); } catch (e) { /* older main process: just keep the normal look */ }
         const root = document.documentElement;
         const vars = { '--gv-bg': 'bg', '--gv-backdrop': 'backdrop', '--gv-surface': 'surface', '--gv-fg': 'fg',
                        '--gv-subtext': 'subtext', '--gv-primary': 'primary', '--gv-on-primary': 'onPrimary', '--gv-outline': 'outline' };
@@ -45,7 +48,7 @@
         ...M3_COLOURS.map((c) => ['m3-' + c[0] + '-dark', 'm3-' + c[0] + '-light']));
     let selectedTheme = prefs.theme || constants.DEFAULT_SETTING_THEME;
     let palettes = {};
-    try { palettes = await ipcRenderer.invoke('get-theme-palettes', allThemeIds); } catch (e) { /* older main process: plain swatches */ }
+    try { palettes = await api.getThemePalettes(allThemeIds); } catch (e) { /* older main process: plain swatches */ }
     const isLightColour = (c) => {
         const m = /^#([0-9a-f]{6})$/i.exec(c || '');
         if (!m) { return null; }
@@ -113,7 +116,7 @@
     const chooseTheme = (id) => {
         selectedTheme = id;
         renderThemes();
-        ipcRenderer.send('pref-change-theme', id);
+        api.setTheme(id);
         applyPalette(id);
     };
     themeGrid.addEventListener('click', (e) => {
@@ -134,7 +137,7 @@
     // to and from a plain percentage that the user can type.
     const levelToPercent = (level) => Math.round(Math.pow(1.2, level) * 100);
     const percentToLevel = (percent) => Math.log(percent / 100) / Math.log(1.2);
-    zoomSlider.value = levelToPercent(await ipcRenderer.invoke('get-zoom-level'));
+    zoomSlider.value = levelToPercent(await api.getZoomLevel());
     zoomSlider.addEventListener('change', (e) => {
         let percent = parseFloat(e.target.value);
         if (isNaN(percent)) {
@@ -142,11 +145,11 @@
         }
         percent = Math.min(500, Math.max(25, Math.round(percent)));
         zoomSlider.value = percent;
-        ipcRenderer.send('pref-change-zoom', percentToLevel(percent));
+        api.setZoom(percentToLevel(percent));
     });
 
     // The zoom keys (Cmd/Ctrl + - 0) change the main window, so keep the box in step with them.
-    ipcRenderer.on('zoom-level-changed', (e, level) => {
+    api.onZoomLevelChanged((level) => {
         if (document.activeElement !== zoomSlider) { zoomSlider.value = levelToPercent(level); }
     });
 
@@ -155,7 +158,7 @@
     const zoomResetButton = document.getElementById('reset-zoom');
     zoomResetButton.addEventListener('click', (e) => {
         zoomSlider.value = 100;
-        ipcRenderer.send('pref-change-zoom', 0);
+        api.setZoom(0);
     });
     
     // The menus are in the title bar (Windows/Linux) or the system menu bar (Mac), so there is no "show menu bar" setting.
@@ -164,10 +167,10 @@
     // Set the "start automatically" checkbox based on the user's currently selected
     // preference.  Notify the main process whenever the preference changes.
     const startAutomatically = document.getElementById('start-automatically');
-    startAutomatically.checked = await ipcRenderer.invoke('get-start-automatically');
+    startAutomatically.checked = await api.getStartAutomatically();
     startAutomatically.addEventListener('change', (e) => {
         const checked = e.target.checked;
-        ipcRenderer.send('pref-change-start-automatically', checked);
+        api.setStartAutomatically(checked);
     });
 
     // Set the "start minimized" checkbox based on the user's currently selected
@@ -176,7 +179,7 @@
     minimizedSetting.checked = (prefs.startMinimized != undefined) ? prefs.startMinimized : constants.DEFAULT_SETTING_START_MINIMIZED;
     minimizedSetting.addEventListener('change', (e) => {
         const checked = e.target.checked;
-        ipcRenderer.send('pref-change-start-minimized', checked);
+        api.setStartMinimized(checked);
     });
 
     // Set the "exit on close" checkbox based on the user's currently selected
@@ -185,7 +188,7 @@
     exitOnCloseSetting.checked = (prefs.exitOnClose != undefined) ? prefs.exitOnClose : constants.DEFAULT_SETTING_EXIT_ON_CLOSE;
     exitOnCloseSetting.addEventListener('change', (e) => {
         const checked = e.target.checked;
-        ipcRenderer.send('pref-change-exit-on-close', checked);
+        api.setExitOnClose(checked);
     });
 
     // Set the "hide dialer sidebar" checkbox based on the user's currently selected
@@ -194,7 +197,7 @@
     hideDialerSidebar.checked = (prefs.hideDialerSidebar != undefined) ? prefs.hideDialerSidebar : constants.DEFAULT_HIDE_DIALER_SIDEBAR;
     hideDialerSidebar.addEventListener('change', (e) => {
         const checked = e.target.checked;
-        ipcRenderer.send('pref-change-hide-dialer-sidebar', checked);
+        api.setHideDialerSidebar(checked);
     });
 
     // Set the "collapse sidebar" checkbox (off by default); it takes effect immediately.
@@ -206,28 +209,28 @@
     hoverSideNav.disabled = !collapseSideNav.checked;
     collapseSideNav.addEventListener('change', (e) => {
         hoverSideNav.disabled = !e.target.checked;
-        ipcRenderer.send('pref-change-collapse-side-nav', e.target.checked);
+        api.setCollapseSideNav(e.target.checked);
     });
     hoverSideNav.addEventListener('change', (e) => {
-        ipcRenderer.send('pref-change-hover-side-nav', e.target.checked);
+        api.setHoverSideNav(e.target.checked);
     });
 
     // Set the "spell check" checkbox; the main process applies it the next time the app starts.
     const spellcheck = document.getElementById('spellcheck');
     spellcheck.checked = prefs.spellcheck !== false;
     spellcheck.addEventListener('change', (e) => {
-        ipcRenderer.send('pref-change-spellcheck', e.target.checked);
+        api.setSpellcheck(e.target.checked);
     });
 
     // "App icon": a grid of pictures (the built-in icons, "Your image" once one has been chosen, and a "+" tile that opens
     // the file picker).  Applies immediately.
     try {
-        const first = await ipcRenderer.invoke('get-icon-sets');
+        const first = await api.getIconSets();
         if (first.sets.length > 1) {
             const grid = document.getElementById('app-icon-grid');
             const nameLabel = document.getElementById('app-icon-name');
             let selected = first.current;
-            let customUrl = first.customFile ? require('url').pathToFileURL(first.customFile).href + '?v=' + Date.now() : null;
+            let customUrl = first.customFileUrl ? first.customFileUrl + '?v=' + Date.now() : null;
             const labels = {};
             first.sets.forEach((s) => { labels[s.id] = s.label; });
             labels.custom = 'Your image';
@@ -266,11 +269,11 @@
                 const b = e.target.closest('.icon-tile');
                 if (!b) { return; }
                 const id = b.dataset.id;
-                if (id !== '__choose__') { selected = id; render(); ipcRenderer.send('pref-change-app-icon', id); return; }
-                const result = await ipcRenderer.invoke('pick-custom-icon');
+                if (id !== '__choose__') { selected = id; render(); api.setAppIcon(id); return; }
+                const result = await api.pickCustomIcon();
                 if (result === 'ok') {
-                    const now = await ipcRenderer.invoke('get-icon-sets');
-                    customUrl = now.customFile ? require('url').pathToFileURL(now.customFile).href + '?v=' + Date.now() : null;
+                    const now = await api.getIconSets();
+                    customUrl = now.customFileUrl ? now.customFileUrl + '?v=' + Date.now() : null;
                     selected = 'custom';
                     render();
                 } else if (result === 'not-an-image') {
@@ -284,17 +287,17 @@
 
     // Set the "copy verification codes" checkbox (off by default); it takes effect immediately.
     const copyCodes = document.getElementById('copy-codes');
-    if (process.platform === 'win32') { document.getElementById('copy-codes-row').style.display = 'none'; }   // Windows notifications have their own Copy button
+    if (init.platform === 'win32') { document.getElementById('copy-codes-row').style.display = 'none'; }   // Windows notifications have their own Copy button
     copyCodes.checked = !!prefs.copyCodes;
     copyCodes.addEventListener('change', (e) => {
-        ipcRenderer.send('pref-change-copy-codes', e.target.checked);
+        api.setCopyCodes(e.target.checked);
     });
 
     // Set the "tell me about updates" checkbox (on by default).
     const checkUpdates = document.getElementById('check-updates');
     checkUpdates.checked = prefs.checkForUpdates !== false;
     checkUpdates.addEventListener('change', (e) => {
-        ipcRenderer.send('pref-change-check-updates', e.target.checked);
+        api.setCheckUpdates(e.target.checked);
     });
 
     // "Top bar": a picture of Google Voice's top bar.  Clicking an item hides or shows it (applied to the main window at once).
@@ -315,7 +318,7 @@
     ];
     const hiddenBar = new Set(Array.isArray(prefs.hiddenTopBarItems) ? prefs.hiddenTopBarItems : (prefs.hideUpgradeButton ? ['upgrade'] : []));
     let barPresent = null;   // keys of the items that exist on this account's page; null = unknown (then nothing is greyed out)
-    try { barPresent = await ipcRenderer.invoke('get-topbar-present'); } catch (e) { /* older main process */ }
+    try { barPresent = await api.getTopbarPresent(); } catch (e) { /* older main process */ }
     const barAbsent = (key) => Array.isArray(barPresent) && !barPresent.includes(key);
     const barMock = document.getElementById('topbar-mock');
     const barCaption = document.getElementById('topbar-caption');
@@ -338,7 +341,7 @@
         });
         barSummary();
     };
-    const saveBar = () => { renderBar(); ipcRenderer.send('pref-change-topbar-hidden', Array.from(hiddenBar)); };
+    const saveBar = () => { renderBar(); api.setTopbarHidden(Array.from(hiddenBar)); };
     const barItemFor = (e) => { const b = e.target.closest('.tb-chip'); return b ? TOPBAR_ITEMS.find((i) => i.key === b.dataset.key) : null; };
     const barHover = (e) => { const item = barItemFor(e); if (item) { barCaption.textContent = barAbsent(item.key) ? item.label + ' \u2013 not on your page' : item.label + (hiddenBar.has(item.key) ? ' \u2013 hidden (click to show)' : ' \u2013 shown (click to hide)'); } };
     barMock.addEventListener('click', (e) => {
@@ -378,7 +381,7 @@
             tallest = Math.max(tallest, panel.offsetHeight);
             panel.style.display = was;
         });
-        ipcRenderer.send('settings-fit-height', Math.ceil(window.innerHeight - row.clientHeight + tallest + 8));
-        requestAnimationFrame(() => requestAnimationFrame(() => ipcRenderer.send('settings-ready')));
+        api.fitHeight(Math.ceil(window.innerHeight - row.clientHeight + tallest + 8));
+        requestAnimationFrame(() => requestAnimationFrame(() => api.ready()));
     }
 })();

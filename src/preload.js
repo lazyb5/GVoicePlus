@@ -1,25 +1,33 @@
 
 /**********************************************************************************************************************
- * Preload script for the main application window.  Contains all code
- * that needs to execute before the window's web content begins loading.
+ * Preload script for the main application window (the Google Voice page).
  *
- * Google's page runs with Node switched off and context isolation on, so it cannot reach Node or Electron.  This file
- * runs in its own isolated world and is the only code here that can talk to the main process.  The page gets just three
- * small hooks (window.__gvBridge for notifications, window.__gvUnread for the badge count), made with contextBridge,
- * and the few things that must run inside the page itself (the sidebar tweaks and the Notification stand-in) are injected
- * into the page's own world with webFrame.executeJavaScript.
+ * The page runs sandboxed, with Node switched off and context isolation on.  This script runs in its own isolated
+ * world, is the only code that can talk to the main process, and (because of the sandbox) can load nothing but Electron's
+ * small renderer modules, so it is one self-contained file.
+ *
+ * It does nothing at all unless the page is https://voice.google.com itself: the Google sign-in pages are left exactly as
+ * Google serves them.  On the Voice page it:
+ *   1. asks the main process once (sync) for the early theme CSS, the sidebar settings and the text of the notification
+ *      stand-in (main.js only answers the real Voice page),
+ *   2. gives the page two small hooks made with contextBridge: window.__gvBridge (notify / close / onClick, for
+ *      notifications) and window.__gvUnread (the unread count).  Every value is checked in the main process too.
+ *   3. puts two pieces of code into the page's own JavaScript world (webFrame.executeJavaScript): the sidebar tweaks and
+ *      the Notification stand-in.  They need the page's own world because they replace functions Google's code calls
+ *      (window.matchMedia, window.Notification).  They are plain text by the time they get there: they hold no reference
+ *      to Node, Electron, ipcRenderer or this world, and reach the app only through the two hooks above.
  **********************************************************************************************************************/
 
 const {ipcRenderer, contextBridge, webFrame} = require('electron');
-const {notificationShim} = require('./utils/notificationShim');
 
-// Apply the theme before the page's first paint, so Google's white header never shows.  The main process hands back
+const VOICE_ORIGIN = 'https://voice.google.com';
+
+// Applies the theme before the page's first paint, so Google's white header never shows.  The main process hands back
 // the theme CSS (or nothing for pages that should stay unthemed); main.js removes this <style> once its own copy of
 // the theme is in place, so switching themes later works normally.  Only touches the DOM, which both worlds share.
-(() => {
+function applyEarlyTheme(css) {
     try {
-        const css = ipcRenderer.sendSync('get-early-theme-css', window.location.href);
-        if (!css) { return; }
+        if (!css || typeof css !== 'string') { return; }
         const style = document.createElement('style');
         style.id = 'gv-early-theme';
         style.textContent = css;
@@ -33,39 +41,42 @@ const {notificationShim} = require('./utils/notificationShim');
             observer.observe(document, {childList: true, subtree: true});
         }
     } catch (e) { /* never let theming break the page */ }
-})();
+}
 
-// The only doors from the page to the app.  Everything is coerced to plain values here, so the page cannot hand the
-// main process anything unexpected.
-let notifyClickCallback = null;
+// The only doors from the page to the app.  Everything is coerced to plain values here (and checked again in the main
+// process), so the page cannot hand the main process anything unexpected.
 const short = (value, max) => String(value == null ? '' : value).slice(0, max);
 
-contextBridge.exposeInMainWorld('__gvBridge', {
-    notify: (data) => {
-        const d = data || {};
-        ipcRenderer.send('gv-notify', {
-            id: Number(d.id) || 0,
-            title: short(d.title, 500),
-            body: short(d.body, 5000),
-            tag: short(d.tag, 500),
-            silent: !!d.silent
-        });
-    },
-    close: (id) => { ipcRenderer.send('gv-notify-close', Number(id) || 0); },
-    onClick: (callback) => { if (typeof callback === 'function') { notifyClickCallback = callback; } }
-});
+function exposeHooks() {
+    let notifyClickCallback = null;
 
-// Lets the page-side unread watcher (src/utils/unreadWatcher.js) report the count the moment it changes.
-contextBridge.exposeInMainWorld('__gvUnread', (count) => { ipcRenderer.send('gv-unread', Number(count) || 0); });
+    contextBridge.exposeInMainWorld('__gvBridge', {
+        notify: (data) => {
+            const d = data || {};
+            ipcRenderer.send('gv-notify', {
+                id: Math.trunc(Number(d.id)) || 0,
+                title: short(d.title, 500),
+                body: short(d.body, 5000),
+                tag: short(d.tag, 500),
+                silent: !!d.silent
+            });
+        },
+        close: (id) => { ipcRenderer.send('gv-notify-close', Math.trunc(Number(id)) || 0); },
+        onClick: (callback) => { if (typeof callback === 'function') { notifyClickCallback = callback; } }
+    });
 
-// The main process tells us when the user clicked a notification: pass it to the page's stand-in, then send the
-// existing "notification-clicked" event back, as before.
-ipcRenderer.on('gv-notify-click', (_event, id) => {
-    try { if (notifyClickCallback) { notifyClickCallback(id); } } catch (e) { /* ignore */ }
-    ipcRenderer.send('notification-clicked', {});
-});
+    // Lets the page-side unread watcher (src/utils/unreadWatcher.js) report the count the moment it changes.
+    contextBridge.exposeInMainWorld('__gvUnread', (count) => { ipcRenderer.send('gv-unread', Math.trunc(Number(count)) || 0); });
 
-// Runs `fn` (a self-contained function) inside the page's own world.
+    // The main process tells us when the user clicked a notification: pass it to the page's stand-in, then send the
+    // existing "notification-clicked" event back, as before.
+    ipcRenderer.on('gv-notify-click', (_event, id) => {
+        try { if (notifyClickCallback) { notifyClickCallback(id); } } catch (e) { /* ignore */ }
+        ipcRenderer.send('notification-clicked');
+    });
+}
+
+// Runs source text inside the page's own world.
 const runInPage = (source) => { webFrame.executeJavaScript(source).catch(() => { /* never let this break the page */ }); };
 
 // The sidebar tweaks.  This function is injected into the page's own world (see the bottom of this file), so it must be
@@ -194,12 +205,22 @@ function pageSideNav(navPrefs) {
     })();
 }
 
-// Put both page-side pieces into the page's own world.  They are plain text by the time they get there, so nothing from
-// this (Node-enabled) world leaks across.
-let navPrefs = {};
-try { navPrefs = ipcRenderer.sendSync('get-collapse-side-nav') || {}; } catch (e) { /* default: not collapsed */ }
-runInPage(`(${pageSideNav.toString()})(${JSON.stringify({collapse: !!navPrefs.collapse, hover: !!navPrefs.hover})});`);
+// Starts everything, but only on the Google Voice page.
+function start() {
+    let init = null;
+    try { init = ipcRenderer.sendSync('gv-init'); } catch (e) { /* main process did not answer: do nothing */ }
+    if (!init || typeof init !== 'object') { return; }
 
-// Modify JavaScript's "Notification" class such that all notifications that get generated are forwarded to the main
-// process through the bridge above, and clicks come back the same way.
-runInPage(`(${notificationShim.toString()})(window.__gvBridge);`);
+    applyEarlyTheme(init.earlyThemeCss);
+    exposeHooks();
+
+    // The sidebar tweaks and, from the main process, the text of the Notification stand-in (src/utils/notificationShim.js).
+    // A sandboxed preload cannot require that file itself.
+    const nav = init.nav || {};
+    runInPage(`(${pageSideNav.toString()})(${JSON.stringify({collapse: !!nav.collapse, hover: !!nav.hover})});`);
+    if (typeof init.shimSource === 'string' && init.shimSource) {
+        runInPage(`(${init.shimSource})(window.__gvBridge);`);
+    }
+}
+
+if (window.location.origin === VOICE_ORIGIN) { start(); }

@@ -46,7 +46,7 @@ async function fetchLatest(repo) {
     return { version: String(release.tag_name || ''), url, assets: release.assets };
 }
 
-function init({ getWindow, getPrefs, setPref }) {
+function init({ getWindow, getPrefs, setPref, openExternal = (url) => shell.openExternal(url) }) {
     const say = (options) => {
         const win = getWindow();
         const parent = (win && !win.isDestroyed() && win.isVisible()) ? win : undefined;
@@ -88,7 +88,7 @@ function init({ getWindow, getPrefs, setPref }) {
             detail: `You have v${app.getVersion()}. Download the new version and replace the app to update.`,
             buttons: ['Open download page', 'Later'], defaultId: 0, cancelId: 1
         });
-        if (answer.response === 0) { shell.openExternal(latest.url); }
+        if (answer.response === 0) { openExternal(latest.url); }
     }
 
     const automatic = () => { if (getPrefs().checkForUpdates !== false) { check(false); } };

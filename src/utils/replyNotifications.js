@@ -7,6 +7,7 @@
  **********************************************************************************************************************/
 
 const { ipcMain, Notification } = require('electron');
+const ipcGuard = require('./ipcGuard');
 const ts = () => new Date().toISOString().slice(11, 23);   // HH:MM:SS.mmm UTC, for the [reply] debug log
 
 // Selectors, taken from Google Voice's current markup.  They are deliberately light on class names: custom element
@@ -182,7 +183,11 @@ async function withPageFocus(win, fn) {
     }
 }
 
-module.exports.init = function ({ getWindow, onMessage }) {
+// isTrustedSender(event) says whether an IPC message really came from the Google Voice page (main.js).  Without it nothing
+// is accepted.  Messages are also checked for shape and size, and a page cannot raise more than a handful of
+// notifications per second.
+module.exports.init = function ({ getWindow, onMessage, isTrustedSender = () => false }) {
+    const allowNotification = ipcGuard.createRateLimiter(30, 10000);
     let replyQueue = Promise.resolve();   // replies run one at a time: two scripts must not drive the message box together
     const shown = new Map();   // id -> Notification (holding a reference keeps its handlers alive)
     const byTag = new Map();   // tag -> id, so a newer notification replaces an older one
@@ -208,7 +213,11 @@ module.exports.init = function ({ getWindow, onMessage }) {
         }).catch((e) => console.log(`${ts()} [markread] unexpected error: ${e && e.message}`));
     }
 
-    ipcMain.on('gv-notify', (event, { id, title, body, tag, silent }) => {
+    ipcMain.on('gv-notify', (event, data) => {
+        if (!isTrustedSender(event)) { console.log(`${ts()} [notify] ignored: sender not accepted`); return; }
+        const clean = ipcGuard.cleanNotification(data);
+        if (!clean || !allowNotification()) { console.log(`${ts()} [notify] ignored: malformed or too many`); return; }
+        const { id, title, body, tag, silent } = clean;
         if (tag && byTag.has(tag)) {
             const old = shown.get(byTag.get(tag));
             if (old) { old.close(); }
@@ -273,7 +282,8 @@ module.exports.init = function ({ getWindow, onMessage }) {
         if (copiedCode && copiedCode.length >= 6) { markReadInBackground(title, body); }
     });
 
-    ipcMain.on('gv-notify-close', (_e, id) => {
+    ipcMain.on('gv-notify-close', (event, id) => {
+        if (!isTrustedSender(event) || !ipcGuard.isInt(id, 0, 2147483647)) { return; }
         const n = shown.get(id);
         if (n) { n.close(); }
         shown.delete(id);

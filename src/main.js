@@ -15,15 +15,20 @@ const imagePaste = require('./utils/imagePaste');
 const themePalette = require('./utils/themePalette');
 const accountMenuTheme = require('./utils/accountMenuTheme');
 const Store = require('./utils/prefsStore');   // tiny replacement for electron-store (same config.json)
-const Url = require('url');
+const { pathToFileURL } = require('url');
+const urlPolicy = require('./utils/urlPolicy');
+const ipcGuard = require('./utils/ipcGuard');
+const windowPrefs = require('./utils/windowPrefs');
+const { notificationShim } = require('./utils/notificationShim');
 
 // Constants
 const store = new Store();
 const codeCopy = require('./utils/codeCopy').init({ getPrefs: () => store.get('prefs') || {} });   // copies verification codes when the setting is on
-require('./utils/replyNotifications').init({ getWindow: () => page, onMessage: (body) => (process.platform === 'win32' ? null : codeCopy.handle(body)) });   // Windows notifications have their own Copy button
+require('./utils/replyNotifications').init({ getWindow: () => page, isTrustedSender: (event) => senderIsPage(event), onMessage: (body) => (process.platform === 'win32' ? null : codeCopy.handle(body)) });   // Windows notifications have their own Copy button
 // "Check for updates" (notify only): offers the download page when the GitHub repo in constants.js has a newer release.
 const updates = require('./utils/updateCheck').init({
     getWindow: () => win,
+    openExternal: (url) => openExternalSafe(url),
     getPrefs: () => store.get('prefs') || {},
     setPref: (key, value) => { const prefs = store.get('prefs') || {}; prefs[key] = value; store.set('prefs', prefs); }
 });
@@ -101,6 +106,84 @@ let page;           // The Google Voice page: win itself on macOS; on Windows/Li
 let appMenu;        // The application menu (File / Edit / View / Help), shown by the custom title bar on Windows/Linux
 let settingsWindow; // When not null, the "Settings" window, which is currently open
 
+// ====================================================================================================================
+// Security helpers: who may navigate where, what may be opened outside the app, who may send IPC messages
+// ====================================================================================================================
+const SETTINGS_PAGE = path.join(appPath, 'src', 'pages', 'customize.html');
+const THEMES_DIR = path.join(appPath, 'src', 'themes');
+const pageOpenLimiter = ipcGuard.createRateLimiter(5, 10000);   // at most 5 links per 10 s that the PAGE asks us to open outside the app
+
+// Only a host name or scheme is ever logged, never the whole address (it can carry tokens).
+function hostOf(url) {
+    const u = urlPolicy.parse(url);
+    return u ? (u.hostname || u.protocol) : 'invalid address';
+}
+
+// The one place that hands an address to the operating system.  Only https:, http: and mailto: addresses go out
+// (src/utils/urlPolicy.js); anything else (file:, other programs' schemes, javascript:, data: ...) is dropped.
+function openExternalSafe(url) {
+    const safe = urlPolicy.externalUrl(url);
+    if (!safe) { console.log(`[nav] not opened outside the app: ${hostOf(url)}`); return; }
+    Promise.resolve(shell.openExternal(safe)).catch((e) => console.log(`[nav] could not open a link: ${e && e.message}`));
+}
+
+// Theme names end up in file paths, so only a plain name of a theme that exists is accepted.
+const RESERVED_THEME_FILES = ['base', 'mappings', 'm3'];
+function knownTheme(id) {
+    if (id === 'default') { return true; }
+    if (!ipcGuard.isThemeId(id) || RESERVED_THEME_FILES.includes(id)) { return false; }
+    return fs.existsSync(path.join(THEMES_DIR, `${id}.scss`)) || fs.existsSync(path.join(THEMES_DIR, 'compiled', `${id}.css`));
+}
+function currentTheme() {
+    const theme = process.env.GV_THEME || store.get('prefs.theme') || constants.DEFAULT_SETTING_THEME;
+    return knownTheme(theme) ? theme : 'default';
+}
+
+// The main window's web contents (the page itself; on Windows/Linux the view under the title bar strip).
+function pageContents() {
+    try { return win && !win.isDestroyed() ? page.webContents : null; } catch (e) { return null; }
+}
+function senderIsPage(event) { return ipcGuard.senderIsVoicePage(event, pageContents()); }
+function senderIsSettings(event) {
+    return !!settingsWindow && !settingsWindow.isDestroyed() && ipcGuard.senderIsLocalPage(event, settingsWindow.webContents, SETTINGS_PAGE);
+}
+function senderIsTitleBar(event) {
+    return titleBar.enabled() && !!win && !win.isDestroyed() && ipcGuard.senderIsLocalPage(event, win.webContents, titleBar.pageFile());
+}
+
+// The main window may only show the app and Google sign-in (urlPolicy.APP_HOSTS).  A link the person clicks that leads
+// anywhere else opens in their browser instead.  A redirect to anywhere else is cancelled (not opened in a browser, so a
+// broken redirect can never open a browser window over and over).  Frames inside the page (Google's embedded widgets)
+// are not restricted here.
+function guardPageNavigation(contents) {
+    contents.on('will-navigate', (event, url) => {
+        const target = (event && event.url) || url;
+        const verdict = urlPolicy.classify(target);
+        if (verdict === 'app') { return; }
+        event.preventDefault();
+        console.log(`[nav] navigation to ${hostOf(target)} kept out of the app window`);
+        if (verdict === 'external' && pageOpenLimiter()) { openExternalSafe(target); }
+    });
+    contents.on('will-redirect', (event, url) => {
+        if (event && event.isMainFrame === false) { return; }
+        const target = (event && event.url) || url;
+        if (urlPolicy.classify(target) === 'app') { return; }
+        event.preventDefault();
+        console.log(`[nav] redirect to ${hostOf(target)} cancelled`);
+    });
+}
+
+// The Settings window and the title bar strip show only their own local page: they never navigate and never open windows.
+function guardLocalWindow(contents) {
+    contents.on('will-navigate', (event) => { event.preventDefault(); });
+    contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+}
+
+// No window of ours may embed a <webview>.
+app.on('web-contents-created', (event, contents) => {
+    contents.on('will-attach-webview', (e) => { e.preventDefault(); });
+});
+
 // Only one instance of the app should run
 if (!app.requestSingleInstanceLock()) {
     exitApplication();
@@ -137,11 +220,6 @@ if (isWindows()){
     } catch (e) { console.log(`Could not write the Start Menu shortcut: ${e && e.message}`); }
 }
 
-// Setup notification shim to focus window
-ipcMain.on('notification-clicked', () => {
-    showMainWindow();
-});
-
 // Ask for permission to use the microphone if the OS requires it
 if (isMac()) {
     console.log('asking for microphone access');
@@ -174,8 +252,8 @@ app.whenReady().then(() => {
 function themeForCurrentPage(theme) {
     let url = '';
     try { url = page.webContents.getURL(); } catch (e) { /* window gone */ }
-    const isApp = /^https:\/\/voice\.google\.com\/u\/\d+(\/|$)/.test(url);
-    console.log(`Page ${url} -> ${isApp ? `theme ${theme}` : 'unthemed'}`);
+    const isApp = urlPolicy.isSignedInVoiceUrl(url);
+    console.log(`Page ${hostOf(url)} -> ${isApp ? `theme ${theme}` : 'unthemed'}`);   // host only: a sign-in address carries session tokens
     return isApp ? theme : 'default';
 }
 
@@ -199,29 +277,18 @@ function createWindow() {
     // Create the window, making it hidden initially.  If we have
     // it on record, re-apply the window size last set by the user.
     const prefs = store.get('prefs') || {};
-    applyNativeScheme(process.env.GV_THEME || prefs.theme || constants.DEFAULT_SETTING_THEME);
-    const startTheme = process.env.GV_THEME || prefs.theme || constants.DEFAULT_SETTING_THEME;
-    const pagePrefs = {
-            spellcheck: prefs.spellcheck !== false,   // on by default; costs ~30 MB, can be switched off in Settings (restart to apply)
-            preload: path.join(__dirname, 'preload.js'),
-            // Google's page gets no Node and runs in its own world; only preload.js (sandbox is off so it can load our own
-            // files) reaches the app, through a few small contextBridge hooks.
-            nodeIntegration: false,
-            contextIsolation: true,
-            sandbox: false,
-            // The window is only hidden (not closed) when you dismiss it.  Chromium slows a hidden page's timers to
-            // ~1/s, then ~1/min, which stalls inline replies and the unread watcher until the window is reopened.
-            backgroundThrottling: false
-    };
+    applyNativeScheme(currentTheme());
+    const startTheme = currentTheme();
+    const pagePrefs = windowPrefs.page({ preload: path.join(__dirname, 'preload.js'), spellcheck: prefs.spellcheck !== false });   // spell checking costs ~30 MB; can be switched off in Settings (restart to apply)
     win = new BrowserWindow({
         ...(titleBar.enabled() ? titleBar.windowOptions(themePalette.get(appPath, startTheme)) : {}),
         width: prefs.windowWidth || DEFAULT_WIDTH,
         height: prefs.windowHeight || DEFAULT_HEIGHT,
-        backgroundColor: themeBackground(process.env.GV_THEME || prefs.theme || constants.DEFAULT_SETTING_THEME),
+        backgroundColor: themeBackground(startTheme),
         icon: icons.window,
         show: false,
         // Windows/Linux: the window itself only shows the title bar strip; Google Voice lives in a view below it.
-        webPreferences: titleBar.enabled() ? { nodeIntegration: true, contextIsolation: false, backgroundThrottling: false } : pagePrefs
+        webPreferences: titleBar.enabled() ? windowPrefs.titleBar({ preload: path.join(__dirname, 'titlebarPreload.js') }) : pagePrefs
     })
     page = win;
     if (titleBar.enabled()) {
@@ -247,6 +314,8 @@ function createWindow() {
         });
         win.loadFile(titleBar.pageFile(), { query: titleBar.pageQuery(themePalette.get(appPath, startTheme)) });
     }
+    guardPageNavigation(page.webContents);
+    if (titleBar.enabled()) { guardLocalWindow(win.webContents); }   // Windows/Linux: win itself only shows the title bar strip
     if (process.env.GV_DEVTOOLS) { page.webContents.openDevTools({ mode: 'detach' }); }
 
     // Create the window's menu bar.
@@ -299,16 +368,16 @@ function createWindow() {
         {
             label: '&Help',
             submenu: [
-                {label: 'Report a &bug',                 click: () => {shell.openExternal(constants.URL_GITHUB_REPORT_BUG);}},
-                {label: 'Request a &feature',            click: () => {shell.openExternal(constants.URL_GITHUB_FEATURE_REQUEST);}},
-                {label: 'Ask a &question',               click: () => {shell.openExternal(constants.URL_GITHUB_ASK_QUESTION);}},
-                {label: 'View &issues',                  click: () => {shell.openExternal(constants.URL_GITHUB_VIEW_ISSUES);}},
+                {label: 'Report a &bug',                 click: () => {openExternalSafe(constants.URL_GITHUB_REPORT_BUG);}},
+                {label: 'Request a &feature',            click: () => {openExternalSafe(constants.URL_GITHUB_FEATURE_REQUEST);}},
+                {label: 'Ask a &question',               click: () => {openExternalSafe(constants.URL_GITHUB_ASK_QUESTION);}},
+                {label: 'View &issues',                  click: () => {openExternalSafe(constants.URL_GITHUB_VIEW_ISSUES);}},
                 {type: 'separator'},
-                {label: '&Security Policy',              click: () => {shell.openExternal(constants.URL_GITHUB_SECURITY_POLICY);}},
+                {label: '&Security Policy',              click: () => {openExternalSafe(constants.URL_GITHUB_SECURITY_POLICY);}},
                 {type: 'separator'},
                 {label: 'Check for &updates...',         click: () => {updates.checkNow();}},
-                {label: 'View &releases',                click: () => {shell.openExternal(constants.URL_GITHUB_RELEASES);}},
-                {label: `&About (v${app.getVersion()})`, click: () => {shell.openExternal(constants.URL_GITHUB_README);}}
+                {label: 'View &releases',                click: () => {openExternalSafe(constants.URL_GITHUB_RELEASES);}},
+                {label: `&About (v${app.getVersion()})`, click: () => {openExternalSafe(constants.URL_GITHUB_README);}}
             ]
         }
     ]);
@@ -331,7 +400,7 @@ function createWindow() {
     // Apply the theme as soon as the page's DOM exists (dom-ready), which is well before the page has finished
     // loading, so the page is never seen unthemed.  GV_THEME=<name> npm start overrides the saved theme (handy for testing).
     page.webContents.on('dom-ready', () => {
-        const theme = process.env.GV_THEME || store.get('prefs.theme') || constants.DEFAULT_SETTING_THEME;
+        const theme = currentTheme();
         cssInjector = new CSSInjector(app, page);
         cssInjector.injectTheme(themeForCurrentPage(theme))
             // The preload script already applied the theme before first paint; drop that copy now that this one is in.
@@ -340,6 +409,7 @@ function createWindow() {
     });
 
     page.webContents.on('did-finish-load', () => {
+        if (!urlPolicy.isVoiceUrl(page.webContents.getURL())) { return; }   // the Google sign-in pages are left exactly as Google serves them
         const hideDialerSidebar = store.get('prefs.hideDialerSidebar') || constants.DEFAULT_HIDE_DIALER_SIDEBAR;
         cssInjector.showHideDialerSidebar(hideDialerSidebar);
         topBar.apply(page, hiddenTopBarItems());
@@ -351,7 +421,7 @@ function createWindow() {
     // after the main page and may reload later, so every sub-frame that finishes loading triggers this.
     page.webContents.on('did-frame-finish-load', (event, isMainFrame) => {
         if (isMainFrame) { return; }
-        const theme = process.env.GV_THEME || store.get('prefs.theme') || constants.DEFAULT_SETTING_THEME;
+        const theme = currentTheme();
         accountMenuTheme.apply(page, themePalette.get(appPath, theme));
     });
 
@@ -368,19 +438,21 @@ function createWindow() {
     // unthemed window instead of being routed here.
     page.webContents.setWindowOpenHandler(({ url }) => {
 
-        // If the target URL is a Google Voice URL, have our main window navigate to it instead of opening
-        // it in a new window.  This supports the ability to add additional accounts and switch between
-        // them on-demand.  Otherwise, for all other URLs, have the system open them using the default type
-        // handler.  This is done to force URLs to open in the user's browser, where they are likely already
-        // signed into services that need authentication (e.g. Spotify).  Note that if the user ever gets
-        // stuck navigated somewhere that isn't the main Google Voice page, they can always use the "Reload"
-        // item in the notification area icon context menu to get back to the Google Voice home page.
-        const hostName = Url.parse(url).hostname;
-        if ( hostName === 'voice.google.com' || hostName === 'accounts.google.com') {
-            page && page.loadURL(url);
+        // A link that opens a new window.  If it is the Google Voice app or Google sign-in (see urlPolicy.js), the main window
+        // navigates to it instead of opening a new window.  This supports adding accounts and switching between them.
+        // Anything else is handed to the person's browser (https, http and mailto links only), where they are likely
+        // already signed into services that need authentication (e.g. Spotify).  If the user ever gets stuck
+        // somewhere that isn't the main Google Voice page, the "Reload" item in the menu or the notification area icon gets
+        // them back to the Google Voice home page.
+        const verdict = urlPolicy.classify(url);
+        if (verdict === 'app') {
+            page && page.loadURL(urlPolicy.parse(url).href);
+        }
+        else if (verdict === 'external') {
+            if (pageOpenLimiter()) { openExternalSafe(url); }
         }
         else {
-            shell.openExternal(url);
+            console.log(`[nav] new window to ${hostOf(url)} refused`);
         }
         return { action: 'deny' }; // never let Electron open its own extra window
     });
@@ -440,7 +512,7 @@ function exitApplication() {
 // Voice will be opened in the user's default external browser instead.  During the
 // load, Google Voice itself takes care of asking the user to log in when necessary.
 function loadGoogleVoice(loadExternal=false) {
-    if (loadExternal) {shell.openExternal(constants.URL_GOOGLE_VOICE);}
+    if (loadExternal) {openExternalSafe(constants.URL_GOOGLE_VOICE);}
     else              {page && page.loadURL(constants.URL_GOOGLE_VOICE);}
 }
 
@@ -455,8 +527,9 @@ function updateNotifications(app) {
     // Safety net for the instant updates from unreadWatcher.  Returns null when the page isn't ready (loading, signed
     // out), in which case we keep the last known count instead of treating it as "zero unread".
     page.webContents.executeJavaScript(unreadWatcher.COUNT_EXPR).then(count => {
-        if (count === null) { return; }
-        processNotificationCount(app, count);
+        const n = ipcGuard.cleanCount(count);   // the answer comes from the page: only a whole number is accepted
+        if (n === null) { return; }
+        processNotificationCount(app, n);
     }).catch(() => {});
 
     // The following is a workaround for the Electron bug where after an indeterminate
@@ -599,7 +672,7 @@ function zoomMainWindow(step) { setMainZoom(page.webContents.getZoomLevel() + st
 
 // Creates (if it doesn't already exist) this application's "Settings" window, and then displays it to the user.
 function showSettingsWindow() {
-    if (!settingsWindow) {
+    if (!settingsWindow || settingsWindow.isDestroyed()) {
         // Create our Settings window, keeping a global reference to it.  This reference allows
         // us to know when the window is open, preventing the user from opening it a second time.
         settingsWindow = new BrowserWindow({
@@ -611,12 +684,11 @@ function showSettingsWindow() {
             resizable: false,
             minimizable: false,
             show: false,   // shown once the page has applied its theme (see 'settings-ready'), so it never flashes white
-            backgroundColor: themeBackground(store.get('prefs.theme') || constants.DEFAULT_SETTING_THEME),
-            webPreferences: {
-                nodeIntegration: true,
-                contextIsolation: false
-            }});
+            backgroundColor: themeBackground(currentTheme()),
+            webPreferences: windowPrefs.settings({ preload: path.join(__dirname, 'settingsPreload.js') })
+        });
         settingsWindow.removeMenu();
+        guardLocalWindow(settingsWindow.webContents);
         settingsWindow.webContents.setZoomLevel(0);                  // the Settings window stays at 100%; zoom only changes the main window
         settingsWindow.webContents.setVisualZoomLevelLimits(1, 1);   // no pinch zoom either
         settingsWindow.webContents.on('did-finish-load', () => { settingsWindow.webContents.setZoomLevel(0); });
@@ -626,11 +698,8 @@ function showSettingsWindow() {
             if (settingsWindow && !settingsWindow.isDestroyed() && !settingsWindow.isVisible()) { settingsWindow.show(); }
         }, 2000);
         
-        // Stash the user's settings store on the window so that it can be accessed by the window's renderer process.
-        settingsWindow.prefs = store.get('prefs') || {};
-            
-        // Load our settings page into the window.
-        settingsWindow.loadFile(path.join(appPath, 'src', 'pages', 'customize.html'));
+        // Load our settings page into the window.  The page reads its settings through window.gvSettings (settingsPreload.js).
+        settingsWindow.loadFile(SETTINGS_PAGE);
         //settingsWindow.webContents.openDevTools();
 
         // When the window gets closed, release its global reference.
@@ -663,56 +732,117 @@ function isMac()     {return (process.platform === 'darwin');}
 function isWindows() {return (process.platform === 'win32');}
 
 // ====================================================================================================================
-// Invokable IPC Handlers
+// IPC handlers
 // ====================================================================================================================
+// Every handler first checks WHO sent the message and WHAT it contains (src/utils/ipcGuard.js).  There are three kinds of
+// sender: the Google Voice page (through preload.js), the Settings window and the title bar strip.  A message from any other
+// window or frame, or with an unexpected argument, is ignored (a question gets an error back).  The log line never contains
+// the message itself.
 
-// Returns the execution path of this application.
-ipcMain.handle('get-appPath', () => {
-    return app.getAppPath();
+const none = (...args) => args.length === 0;
+const isBool = ipcGuard.isBool;
+const logRejected = (channel) => console.log(`[ipc] ${channel} ignored: unexpected sender or argument`);
+
+function listen(isSender, channel, valid, handler) {
+    ipcMain.on(channel, (event, ...args) => {
+        if (!isSender(event) || !valid(...args)) { logRejected(channel); return; }
+        try { handler(event, ...args); } catch (e) { console.log(`[ipc] ${channel} failed: ${e && e.message}`); }
+    });
+}
+
+function answer(isSender, channel, valid, handler) {
+    ipcMain.handle(channel, (event, ...args) => {
+        if (!isSender(event) || !valid(...args)) { logRejected(channel); throw new Error('Not allowed'); }
+        return handler(event, ...args);
+    });
+}
+
+// Saves one setting and returns the whole settings object.
+function savePref(key, value) {
+    const prefs = store.get('prefs') || {};
+    prefs[key] = value;
+    store.set('prefs', prefs);
+    return prefs;
+}
+
+// ---- The Google Voice page (preload.js) ------------------------------------------------------------------------------
+
+// Asked (synchronously) by the main window's preload script at the start of every Google Voice page load.  Answers with the
+// theme CSS to apply before first paint (null when the page should stay unthemed), whether the sidebar is collapsed, and the
+// text of the Notification stand-in.  Always answers, because the page is waiting; anything but the Voice page gets null.
+// The reply is the FIRST value given to event.returnValue; a later assignment is ignored (the preload would get null and
+// start nothing), so it is assigned exactly once, at the end, on every path (test/windowSecurity.test.js checks this).
+ipcMain.on('gv-init', (event, ...args) => {
+    let reply = null;
+    if (!none(...args) || !senderIsPage(event)) {
+        logRejected('gv-init');
+    } else {
+        try {
+            const theme = currentTheme();
+            const url = ipcGuard.frameOf(event).url;
+            reply = {
+                earlyThemeCss: (theme !== 'default' && urlPolicy.isSignedInVoiceUrl(url)) ? CSSInjector.themeCss(app, theme) : null,
+                nav: { collapse: !!store.get('prefs.collapseSideNav'), hover: !!store.get('prefs.hoverSideNav') },
+                shimSource: notificationShim.toString()
+            };
+        } catch (e) { console.log(`[ipc] gv-init failed: ${e && e.message}`); }
+    }
+    event.returnValue = reply;
 });
 
-// Returns the platform that this application is running on.
-ipcMain.handle('get-platform', () => {
-    return process.platform;
+// Unread count pushed by the page the moment it changes.
+listen(senderIsPage, 'gv-unread', (count) => ipcGuard.cleanCount(count) !== null, (e, count) => { processNotificationCount(app, count); });
+
+// The user clicked a notification (the page's stand-in has been told; this brings the window forward).
+listen(senderIsPage, 'notification-clicked', none, () => { showMainWindow(); });
+
+// ---- The title bar strip (Windows and Linux) -------------------------------------------------------------------------
+
+// A label in the custom title bar was clicked: open that menu as a native popup under it.
+listen(senderIsTitleBar, 'titlebar-menu', (index, x, y) => ipcGuard.isInt(index, 0, 7) && ipcGuard.isNum(x, 0, 20000) && ipcGuard.isNum(y, 0, 20000), (e, index, x, y) => {
+    titleBar.popupMenu(win, appMenu, index, x, y, () => {
+        if (win.isDestroyed()) { return; }
+        win.webContents.send('titlebar-menu-closed');
+        page.webContents.focus();
+    });
 });
 
-// Returns an object representing the user's current settings store.
-ipcMain.handle('get-user-prefs', () => {
-    return store.get('prefs') || {};
-});
+// ---- Settings window messages ----------------------------------------------------------------------------------------
+
+// What the Settings page needs to start: the saved settings, the platform and the built-in defaults.
+answer(senderIsSettings, 'settings-get-init', none, () => ({
+    prefs: store.get('prefs') || {},
+    platform: process.platform,
+    defaults: {
+        DEFAULT_SETTING_THEME: constants.DEFAULT_SETTING_THEME,
+        DEFAULT_SETTING_START_MINIMIZED: constants.DEFAULT_SETTING_START_MINIMIZED,
+        DEFAULT_SETTING_EXIT_ON_CLOSE: constants.DEFAULT_SETTING_EXIT_ON_CLOSE,
+        DEFAULT_HIDE_DIALER_SIDEBAR: constants.DEFAULT_HIDE_DIALER_SIDEBAR
+    }
+}));
+
+// Returns the current zoom level of this this application's main window.
+answer(senderIsSettings, 'get-zoom-level', none, () => page.webContents.getZoomLevel());
 
 // Returns a bool indicating whether this application is registered to start automatically at logon.
-ipcMain.handle('get-start-automatically', async () => {
+answer(senderIsSettings, 'get-start-automatically', none, async () => {
     let autoLaunch = new AutoLaunch({name: constants.APPLICATION_NAME, path: app.getPath('exe')})
     return await autoLaunch.isEnabled();
 });
 
-// Returns the current zoom level of this this application's main window.
-ipcMain.handle('get-zoom-level', () => {
-    return page.webContents.getZoomLevel();
-});
-
-// ====================================================================================================================
-// Settings Window Event Handlers
-// ====================================================================================================================
-
-// Asked (synchronously) by the main window's preload script at the start of every page load: returns the theme CSS
-// to apply before first paint, or null when the page should stay unthemed (start-up / sign-in pages, default theme).
-ipcMain.on('get-early-theme-css', (event, href) => {
-    let css = null;
-    try {
-        const theme = process.env.GV_THEME || store.get('prefs.theme') || constants.DEFAULT_SETTING_THEME;
-        if (theme !== 'default' && /^https:\/\/voice\.google\.com\/u\/\d+(\/|$)/.test(href || '')) {
-            css = CSSInjector.themeCss(app, theme);
-        }
-    } catch (e) { console.log(e); }
-    event.returnValue = css;
+// Colours of the selected theme, so the Settings window can match it.
+answer(senderIsSettings, 'get-theme-palette', (theme) => theme === undefined || theme === null || ipcGuard.isThemeId(theme), (e, theme) => themePalette.get(appPath, theme || currentTheme()));
+// The colours of several themes at once, for the swatches in the Settings window (null = no colours known, e.g. Default).
+answer(senderIsSettings, 'get-theme-palettes', (ids) => Array.isArray(ids) && ids.length <= 64 && ids.every(ipcGuard.isThemeId), (e, ids) => {
+    const out = {};
+    ids.forEach((id) => { out[id] = themePalette.get(appPath, id); });
+    return out;
 });
 
 // The Settings page reports how tall its tallest tab is; grow the window to fit (never smaller than the default,
 // never taller than the screen) so no tab needs scrolling.
-ipcMain.on('settings-fit-height', (event, height) => {
-    if (!settingsWindow || settingsWindow.isDestroyed() || !(height > 0)) { return; }
+listen(senderIsSettings, 'settings-fit-height', (height) => ipcGuard.isNum(height, 1, 5000), (e, height) => {
+    if (!settingsWindow || settingsWindow.isDestroyed()) { return; }
     const area = require('electron').screen.getDisplayMatching(settingsWindow.getBounds()).workArea;
     const [width, current] = settingsWindow.getContentSize();
     const fitted = Math.min(Math.max(Math.round(height), current), area.height - 60);
@@ -720,12 +850,12 @@ ipcMain.on('settings-fit-height', (event, height) => {
 });
 
 // Called by the Settings page once it has applied the theme colours; only then is the window shown.
-ipcMain.on('settings-ready', () => {
+listen(senderIsSettings, 'settings-ready', none, () => {
     if (settingsWindow && !settingsWindow.isDestroyed() && !settingsWindow.isVisible()) { settingsWindow.show(); }
 });
 
 // Called when the theme has been changed.
-ipcMain.on('pref-change-theme', (event, theme) => {
+listen(senderIsSettings, 'pref-change-theme', (theme) => ipcGuard.isThemeId(theme) && knownTheme(theme), (e, theme) => {
     console.log(`Theme changed to: ${theme}`);
 
     // Apply the selected them and then save the selection to the user's settings store.
@@ -738,43 +868,21 @@ ipcMain.on('pref-change-theme', (event, theme) => {
         titleBar.applyOverlay(win, pal);
         win.webContents.send('titlebar-colours', titleBar.colours(pal));
     }
-    const prefs = store.get('prefs') || {};
-    prefs.theme = theme;
-    store.set('prefs', prefs);
+    savePref('theme', theme);
 });
 
 // Called when the zoom level has been changed.
-ipcMain.on('pref-change-zoom', (event, zoomLevel) => {
-    console.log(`Zoom level changed to: ${zoomLevel}`);
-    
+listen(senderIsSettings, 'pref-change-zoom', (level) => ipcGuard.isNum(level, -7.6, 8.8), (e, level) => {
+    console.log(`Zoom level changed to: ${level}`);
+
     // Apply the newly selected zoom level.  Note that there is no need to save this setting to
     // the user's settings store.  Electron handles remembering our main window's zoom level by
     // default, so it will automatically be restored the next time the application is launched.
-    setMainZoom(parseFloat(zoomLevel));
-});
-
-// A label in the custom title bar was clicked: open that menu as a native popup under it.
-ipcMain.on('titlebar-menu', (e, index, x, y) => {
-    titleBar.popupMenu(win, appMenu, index, x, y, () => {
-        if (win.isDestroyed()) { return; }
-        win.webContents.send('titlebar-menu-closed');
-        page.webContents.focus();
-    });
-});
-
-// Called when the "show menu bar" checkbox has been checked/unchecked.
-ipcMain.on('pref-change-show-menubar', (e, showMenuBar) => {
-    console.log(`"Show menu bar changed to: ${showMenuBar}`);
-    
-    // Apply the new value and then save it to the user's settings store.
-    if (!titleBar.enabled()) { win.setMenuBarVisibility(showMenuBar); }
-    const prefs = store.get('prefs') || {};
-    prefs.showMenuBar = showMenuBar;
-    store.set('prefs', prefs);
+    setMainZoom(level);
 });
 
 // Called when the "start automatically" checkbox has been checked/unchecked.
-ipcMain.on('pref-change-start-automatically', (e, startAutomatically) => {
+listen(senderIsSettings, 'pref-change-start-automatically', isBool, (e, startAutomatically) => {
     console.log(`"Start Automatically" changed to: ${startAutomatically}`);
 
     // Register/unregister this application to be automatically started at logon.
@@ -788,139 +896,93 @@ ipcMain.on('pref-change-start-automatically', (e, startAutomatically) => {
 });
 
 // Called when the "start minimized" checkbox has been checked/unchecked.
-ipcMain.on('pref-change-start-minimized', (e, startMinimized) => {
+listen(senderIsSettings, 'pref-change-start-minimized', isBool, (e, startMinimized) => {
     console.log(`"Start Minimized" changed to: ${startMinimized}`);
-    
-    // Apply the new value and then save it to the user's settings store.
-    const prefs = store.get('prefs') || {};
-    prefs.startMinimized = startMinimized;
-    store.set('prefs', prefs);
+    savePref('startMinimized', startMinimized);
 });
 
 // Called when the "spell check" checkbox has been checked/unchecked.  The window reads it when it is created,
 // so it takes effect the next time the app starts.
-ipcMain.on('pref-change-spellcheck', (e, enabled) => {
-    const prefs = store.get('prefs') || {};
-    prefs.spellcheck = !!enabled;
-    store.set('prefs', prefs);
-});
+listen(senderIsSettings, 'pref-change-spellcheck', isBool, (e, enabled) => { savePref('spellcheck', enabled); });
 
 // Called when the "copy verification codes" checkbox has been checked/unchecked.  Off by default; codeCopy.js reads
 // the setting for every message, so it takes effect immediately.
-ipcMain.on('pref-change-copy-codes', (e, enabled) => {
-    const prefs = store.get('prefs') || {};
-    prefs.copyCodes = !!enabled;
-    store.set('prefs', prefs);
-});
+listen(senderIsSettings, 'pref-change-copy-codes', isBool, (e, enabled) => { savePref('copyCodes', enabled); });
 
 // The icon choices for the Settings dropdown: the built-in ones, whether a custom picture exists, and the one in use.
-ipcMain.handle('get-icon-sets', () => ({ sets: iconSets.list(), current: icons.id, hasCustom: hasCustomIcon(), customFile: hasCustomIcon() ? customIconFile() : null }));
+answer(senderIsSettings, 'get-icon-sets', none, () => ({
+    sets: iconSets.list(),
+    current: icons.id,
+    hasCustom: hasCustomIcon(),
+    customFileUrl: hasCustomIcon() ? pathToFileURL(customIconFile()).href : null
+}));
 
 // Called when a different "App icon" is picked.  Applies at once and is remembered for next time.
-ipcMain.on('pref-change-app-icon', (e, id) => {
-    if (!iconSets.has(id) && !(id === 'custom' && hasCustomIcon())) { return; }
-    const prefs = store.get('prefs') || {};
-    prefs.appIcon = id;
-    store.set('prefs', prefs);
+listen(senderIsSettings, 'pref-change-app-icon', (id) => typeof id === 'string' && (iconSets.has(id) || (id === 'custom' && hasCustomIcon())), (e, id) => {
+    savePref('appIcon', id);
     applyIconSet(id);
 });
 
 // "Choose your own image...": shows a file picker; a usable picture is saved and applied.  Answers 'ok', 'cancelled'
 // or 'not-an-image'.
-ipcMain.handle('pick-custom-icon', async (e) => {
+answer(senderIsSettings, 'pick-custom-icon', none, async (e) => {
     const result = await customIcon.pick(BrowserWindow.fromWebContents(e.sender), customIconFile());
     if (result === 'ok') {
-        const prefs = store.get('prefs') || {};
-        prefs.appIcon = 'custom';
-        store.set('prefs', prefs);
+        savePref('appIcon', 'custom');
         applyIconSet('custom');
     }
     return result;
 });
 
 // Called when the "check for updates" checkbox has been checked/unchecked.
-ipcMain.on('pref-change-check-updates', (e, enabled) => {
-    const prefs = store.get('prefs') || {};
-    prefs.checkForUpdates = !!enabled;
-    store.set('prefs', prefs);
-});
+listen(senderIsSettings, 'pref-change-check-updates', isBool, (e, enabled) => { savePref('checkForUpdates', enabled); });
 
 // Called when the "exit on close" checkbox has been checked/unchecked.
-ipcMain.on('pref-change-exit-on-close', (e, exitOnClose) => {
+listen(senderIsSettings, 'pref-change-exit-on-close', isBool, (e, exitOnClose) => {
     console.log(`"Exit on close" changed to: ${exitOnClose}`);
-    
-    // Apply the new value and then save it to the user's settings store.
-    const prefs = store.get('prefs') || {};
-    prefs.exitOnClose = exitOnClose;
-    store.set('prefs', prefs);
-});
-
-// Asked (synchronously) by the preload script at the start of every page load, so that the sidebar is already collapsed
-// before the page first draws.
-ipcMain.on('get-collapse-side-nav', (event) => {
-    event.returnValue = { collapse: !!store.get('prefs.collapseSideNav'), hover: !!store.get('prefs.hoverSideNav') };
+    savePref('exitOnClose', exitOnClose);
 });
 
 // Called when the "show sidebar on hover" checkbox has been checked/unchecked.
-ipcMain.on('pref-change-hover-side-nav', (e, hover) => {
-    const prefs = store.get('prefs') || {};
-    prefs.hoverSideNav = !!hover;
-    store.set('prefs', prefs);
-    sideNav.setHover(page, prefs.hoverSideNav);
+listen(senderIsSettings, 'pref-change-hover-side-nav', isBool, (e, hover) => {
+    savePref('hoverSideNav', hover);
+    sideNav.setHover(page, hover);
 });
 
 // Called when the "collapse sidebar" checkbox has been checked/unchecked.  Collapses (or re-opens) it right away.
-ipcMain.on('pref-change-collapse-side-nav', (e, collapse) => {
-    const prefs = store.get('prefs') || {};
-    prefs.collapseSideNav = !!collapse;
-    store.set('prefs', prefs);
-    sideNav.setCollapsed(page, prefs.collapseSideNav);
+listen(senderIsSettings, 'pref-change-collapse-side-nav', isBool, (e, collapse) => {
+    savePref('collapseSideNav', collapse);
+    sideNav.setCollapsed(page, collapse);
 });
 
 // Called when the "hide dialer sidebar" checkbox has been checked/unchecked.
-ipcMain.on('pref-change-hide-dialer-sidebar', (e, hideDialerSidebar) => {
+listen(senderIsSettings, 'pref-change-hide-dialer-sidebar', isBool, (e, hideDialerSidebar) => {
     console.log(`Hide dialer sidebar changed to: ${hideDialerSidebar}`);
-    
-    // Apply the new value and then save it to the user's settings store.
-    const prefs = store.get('prefs') || {};
-    prefs.hideDialerSidebar = hideDialerSidebar;
-
     cssInjector.showHideDialerSidebar(hideDialerSidebar);
-    store.set('prefs', prefs);
+    savePref('hideDialerSidebar', hideDialerSidebar);
 });
 
 // Which top-bar items are hidden.  Older versions only had a "hide Upgrade" checkbox, so honour that until the user
 // has chosen items with the new editor.
 function hiddenTopBarItems() {
     const prefs = store.get('prefs') || {};
-    if (Array.isArray(prefs.hiddenTopBarItems)) { return prefs.hiddenTopBarItems; }
+    if (Array.isArray(prefs.hiddenTopBarItems)) { return prefs.hiddenTopBarItems.filter((k) => topBar.KEYS.includes(k)); }
     return prefs.hideUpgradeButton ? ['upgrade'] : [];
 }
 
-// Which top-bar items exist on this account's page (null = unknown), so Settings can grey out the ones that don't.
-ipcMain.handle('get-topbar-present', () => topBar.present(page));
+// Which top-bar items exist on this account's page (null = unknown), so Settings can grey out the ones that don't.  The
+// answer comes from the Google page, so only the known item names are passed on.
+answer(senderIsSettings, 'get-topbar-present', none, async () => {
+    const keys = await topBar.present(page);
+    return Array.isArray(keys) ? keys.filter((k) => topBar.KEYS.includes(k)) : null;
+});
 
 // The top-bar picture in Settings: save which items are hidden and apply it to the open page straight away.
-ipcMain.on('pref-change-topbar-hidden', (e, keys) => {
-    if (!Array.isArray(keys)) { return; }
-    const hidden = keys.filter((k) => typeof k === 'string');
+listen(senderIsSettings, 'pref-change-topbar-hidden', (keys) => Array.isArray(keys) && keys.length <= 32 && keys.every((k) => typeof k === 'string'), (e, keys) => {
+    const hidden = keys.filter((k) => topBar.KEYS.includes(k));
     const prefs = store.get('prefs') || {};
     prefs.hiddenTopBarItems = hidden;
     delete prefs.hideUpgradeButton;
     store.set('prefs', prefs);
     topBar.apply(page, hidden);
-});
-
-// Unread count pushed by the page the moment it changes.
-ipcMain.on('gv-unread', (e, count) => {
-    if (Number.isFinite(count)) { processNotificationCount(app, count); }
-});
-
-// Colours of the selected theme, so the Settings window can match it.
-ipcMain.handle('get-theme-palette', (e, theme) => themePalette.get(appPath, theme || store.get('prefs.theme')));
-// The colours of several themes at once, for the swatches in the Settings window (null = no colours known, e.g. Default).
-ipcMain.handle('get-theme-palettes', (e, ids) => {
-    const out = {};
-    (Array.isArray(ids) ? ids : []).forEach((id) => { if (typeof id === 'string') { out[id] = themePalette.get(appPath, id); } });
-    return out;
 });
