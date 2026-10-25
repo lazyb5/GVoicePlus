@@ -1,5 +1,5 @@
 // Requires
-const { app, nativeImage, nativeTheme, BrowserWindow, Tray, Menu, ipcMain, BrowserView, WebContentsView, shell, powerMonitor, systemPreferences } = require('electron');
+const { app, nativeImage, nativeTheme, BrowserWindow, Tray, Menu, ipcMain, BrowserView, WebContentsView, shell, powerMonitor, systemPreferences, session } = require('electron');
 const constants = require('./constants');
 const titleBar = require('./utils/titleBar');
 const AutoLaunch = require('auto-launch')
@@ -19,6 +19,7 @@ const { pathToFileURL } = require('url');
 const urlPolicy = require('./utils/urlPolicy');
 const ipcGuard = require('./utils/ipcGuard');
 const windowPrefs = require('./utils/windowPrefs');
+const permissionPolicy = require('./utils/permissionPolicy');
 const { notificationShim } = require('./utils/notificationShim');
 
 // Constants
@@ -242,6 +243,9 @@ app.on('activate', () => {
 setInterval(updateNotifications.bind(this, app), REFRESH_RATE);
 
 app.whenReady().then(() => {
+    // Web permissions (microphone for calls, notifications) for the Voice page only; everything else is refused.  Both
+    // handlers go on the one session all windows share, before any window exists (src/utils/permissionPolicy.js).
+    permissionPolicy.install(session.defaultSession, { getPageContents: pageContents, log: (line) => console.log(line) });
     // Set the Dock icon once the app is ready; setting it earlier can be ignored, which leaves the generic Electron icon.
     app.dock && app.dock.setIcon(icons.dock);
     createWindow();
