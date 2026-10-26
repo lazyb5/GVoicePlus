@@ -2,8 +2,10 @@
  * Shows notifications forwarded by notificationShim.js as native Electron notifications with an inline reply
  * field, and sends replies by driving the Google Voice page.
  *
- * Safety rule: a reply is only sent if the open conversation's title EXACTLY matches the notification's sender.
- * If anything doesn't line up, nothing is sent and a "Reply not sent" notification shows your text so it isn't lost.
+ * Safety rule: a reply is only sent if the conversation is identified (one candidate, or the notification's text picks
+ * exactly one; see pickThread) and the open conversation pane is confirmed to show it, with the message box inside that
+ * pane (see confirmPane), both just before sending.  If anything is ambiguous or doesn't line up, nothing is sent and a "Reply not sent" notification
+ * asks the person to reply in the app and shows their text so it isn't lost.
  **********************************************************************************************************************/
 
 const { ipcMain, Notification } = require('electron');
@@ -17,21 +19,75 @@ const SEL = {
     rowClick:    '.container',
     activeRow:   '.container.active',
     preview:     'gv-annotation.preview',
+    pane:        'gv-thread-details',
     header:      'gv-thread-details-header',
     messagesNav: "gv-side-nav a.navListItem[aria-label^='Messages']",
     entry:       'gv-message-entry',
     input:       "gv-message-entry textarea, gv-message-entry [contenteditable='true']"
 };
 
+// Picks which row of the conversation list a notification belongs to.  It never touches the page, so it can be tested,
+// and it is stringified and passed into the page together with pageReply.  `snaps` has one entry per list row:
+// { titles: [text owned directly by each element in the row], preview: 'latest message', active: bool }, all
+// normalised (lower case, direction marks removed).  Returns { index, kind, byText } or { error }.
+//   kind 'title': a row whose title is exactly the sender (a contact or phone number)
+//   kind 'group': a row whose preview starts "sender:" (a group chat whose latest message is from the sender)
+//   - One candidate row: it is used (byText false).
+//   - Several candidates (duplicate titles, several groups, a title plus a group): the notification's text must pick
+//     exactly one by appearing in its preview (byText true).  If it picks none or more than one, the result is
+//     'thread-ambiguous': nothing is sent and the person is told to reply in the app.  The first candidate is never
+//     taken just because it is first.
+// Limit: the rows read from the page may not be the whole list, so a lone visible row is not proof that no other
+// conversation has the same name.  This code has no conversation ID to compare (the notification shim forwards only
+// title, text and tag).  If an ID is ever confirmed on the live page it should replace this matching.
+function pickThread(snaps, want, wantBody) {
+    const isTitle = (s) => s.titles.includes(want);
+    const isGroup = (s) => !isTitle(s) && s.preview.startsWith(want + ':');
+    const cand = [];
+    snaps.forEach((s, i) => { if (isTitle(s) || isGroup(s)) { cand.push(i); } });
+    if (!cand.length) { return { error: 'thread-not-found' }; }
+    const kindOf = (i) => (isTitle(snaps[i]) ? 'title' : 'group');
+    if (cand.length === 1) { return { index: cand[0], kind: kindOf(cand[0]), byText: false }; }
+    const hits = wantBody ? cand.filter((i) => snaps[i].preview.includes(wantBody)) : [];
+    if (hits.length === 1) { return { index: hits[0], kind: kindOf(hits[0]), byText: true }; }
+    return { error: 'thread-ambiguous' };
+}
+
+// Confirms the row that was chosen and clicked.  It does not choose again: it looks at that one row (by position of the
+// same page element) and requires that it still shows the sender it was chosen for, that it is the only selected
+// thread, and that the conversation pane is open.  Same stringify-into-the-page rules as pickThread.
+function confirmThread(snaps, index, kind, want, headerOpen) {
+    const s = snaps[index];
+    if (!s || !headerOpen || !s.active) { return false; }
+    if (snaps.filter((x) => x.active).length !== 1) { return false; }
+    return kind === 'title' ? s.titles.includes(want) : s.preview.startsWith(want + ':');
+}
+
+// Confirms the OPEN conversation pane, which is what the reply is typed into (a selected list row alone proves nothing
+// about it).  `info` is read from the page: { pane: the pane exists, composer: the message box was found INSIDE that
+// pane, header: the pane header's text, text: the pane's text }, all normalised.  The pane must show the sender (title
+// rows: in the header; group rows: anywhere in the pane).  When the notification's text was what chose the
+// conversation (needText), the pane must contain it too.  Returns '' when it lines up, otherwise the reason:
+//   'pane-mismatch'     no pane or header, or the pane does not show what it must
+//   'composer-mismatch' the message box that would be typed into is not inside the open pane
+// Same stringify-into-the-page rules as pickThread.
+function confirmPane(info, kind, want, wantBody, needText) {
+    if (!info.pane || !info.header) { return 'pane-mismatch'; }
+    if (!info.composer) { return 'composer-mismatch'; }
+    if (kind === 'title' ? !info.header.includes(want) : !info.text.includes(want)) { return 'pane-mismatch'; }
+    if (needText && (!wantBody || !info.text.includes(wantBody))) { return 'pane-mismatch'; }
+    return '';
+}
+
 // Runs INSIDE the Google Voice page (it is stringified and executed there), so it must be self-contained.
-// `name` is the notification's title and `body` its text.  The thread is chosen like this:
-//   1. a thread whose title is exactly `name` (a contact or phone number), else
-//   2. a group thread whose latest message is from `name` (the list shows "name: message"), preferring the one whose
-//      preview matches the notification's text.
-// Nothing looser than that is accepted, and the reply only goes out once that row is the selected thread.
-// A draft already in the message box is put back afterwards.
+// `name` is the notification's title and `body` its text.  pickThread chooses the conversation (or refuses with
+// 'thread-ambiguous' / 'thread-not-found'); the chosen row is clicked and confirmThread is checked on that same row;
+// confirmPane then checks the OPEN pane (it must show the sender, and the notification's text when the text was what
+// chose the conversation, and contain the message box that is typed into).  Both are checked again just before
+// sending.  Any failure sends nothing.
+// A draft in any message box is never overwritten: it blocks a thread switch, and is put back afterwards.
 // With dryRun=true it does everything except click send.
-async function pageReply(name, text, SEL, dryRun, body) {
+async function pageReply(name, text, SEL, dryRun, body, pickThread, confirmThread, confirmPane) {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     // Google wraps phone numbers in invisible direction marks; strip those so "33201" matches "\u202a33201\u202c".
     const norm = (s) => (s || '').replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -42,39 +98,64 @@ async function pageReply(name, text, SEL, dryRun, body) {
     const ownTexts = (root) => Array.from(root.querySelectorAll('*')).map((e) =>
         norm(Array.from(e.childNodes).filter((n) => n.nodeType === 3).map((n) => n.nodeValue).join(' '))).filter(Boolean);
     const previewOf = (row) => { const p = row.querySelector(SEL.preview); return norm(p ? p.textContent : ''); };
-
-    const targetRow = () => {
-        const rows = Array.from(document.querySelectorAll(SEL.thread));
-        const byTitle = rows.filter((r) => ownTexts(r).includes(want));
-        const pool = byTitle.length ? byTitle : rows.filter((r) => previewOf(r).startsWith(want + ':'));
-        if (!pool.length) { return null; }
-        return (wantBody && pool.find((r) => previewOf(r).includes(wantBody))) || pool[0];
+    const snapshot = (r) => ({ titles: ownTexts(r), preview: previewOf(r), active: !!r.querySelector(SEL.activeRow) });
+    const listRows = () => Array.from(document.querySelectorAll(SEL.thread));
+    const resolve = () => { const rows = listRows(); return { rows, pick: pickThread(rows.map(snapshot), want, wantBody) }; };
+    const toChosen = (x) => ({ row: x.rows[x.pick.index], kind: x.pick.kind, byText: x.pick.byText });
+    // Is `row` (the very element that was chosen, not a fresh selection) still in the list, still showing the sender it
+    // was chosen for, the only selected thread, with the conversation pane open?
+    const isOpen = (row, kind) => {
+        const rows = listRows();
+        return confirmThread(rows.map(snapshot), rows.indexOf(row), kind, want, !!document.querySelector(SEL.header));
     };
-    const targetActive = () => { const r = targetRow(); return !!r && !!r.querySelector(SEL.activeRow) && !!document.querySelector(SEL.header); };
     const waitFor = async (fn, tries, ms) => { for (let i = 0; i < tries; i++) { const v = fn(); if (v) { return v; } await sleep(ms); } return fn(); };
 
-    // Google Voice's website drops unsent text when you change threads, so never leave a thread that has some typed in it.
-    const openDraft = () => {
-        const b = document.querySelector(SEL.input);
-        return !!b && !!((b.isContentEditable ? b.innerText : b.value) || '').trim();
+    // The message box and send button are only ever taken from INSIDE the open conversation pane.
+    const paneEl = () => document.querySelector(SEL.pane);
+    const composerEl = () => { const p = paneEl(); return p ? p.querySelector(SEL.input) : null; };
+    const entryEl = () => { const p = paneEl(); return p ? p.querySelector(SEL.entry) : null; };
+    const paneInfo = () => {
+        const p = paneEl();
+        const h = p ? p.querySelector(SEL.header) : null;
+        return { pane: !!p, composer: !!composerEl(), header: h ? norm(h.textContent) : '', text: p ? norm(p.textContent) : '' };
     };
 
-    if (!targetActive()) {
+    // Google Voice's website drops unsent text when you change threads, so never leave a thread that has some typed in
+    // it.  Every message box on the page is checked, so a draft is protected wherever it sits.
+    const hasText = (b) => !!((b.isContentEditable ? b.innerText : b.value) || '').trim();
+    const openDraft = () => Array.from(document.querySelectorAll(SEL.input)).some(hasText);
+
+    let r = resolve();
+    if (r.pick.error === 'thread-ambiguous') { return 'thread-ambiguous'; }
+    let chosen = r.pick.error ? null : toChosen(r);
+    if (!chosen || !isOpen(chosen.row, chosen.kind)) {
         if (openDraft()) { return 'draft-present'; }
-        let row = targetRow();
-        // Thread not in the list being shown: that is usually because another tab is open (Calls, Voicemail, Spam...),
-        // and those tabs have rows too, so "no rows at all" is not a good test.  Go to Messages unless already there.
-        if (!row && !/\/messages(\/|$)/.test(location.pathname)) {
-            const nav = document.querySelector(SEL.messagesNav);
-            if (nav) { nav.click(); row = await waitFor(targetRow, 20, 150); }
+        if (!chosen) {
+            // Thread not in the list being shown: that is usually because another tab is open (Calls, Voicemail, Spam...),
+            // and those tabs have rows too, so "no rows at all" is not a good test.  Go to Messages unless already there.
+            if (!/\/messages(\/|$)/.test(location.pathname)) {
+                const nav = document.querySelector(SEL.messagesNav);
+                if (nav) {
+                    nav.click();
+                    r = (await waitFor(() => { const x = resolve(); return x.pick.error === 'thread-not-found' ? null : x; }, 20, 150)) || resolve();
+                }
+            }
+            if (r.pick.error) { return r.pick.error; }
+            chosen = toChosen(r);
         }
-        if (!row) { return 'thread-not-found'; }
         if (openDraft()) { return 'draft-present'; }   // typed while we waited for the list
-        (row.querySelector(SEL.rowClick) || row).click();
-        if (!(await waitFor(targetActive, 25, 120))) { return 'thread-mismatch'; }
+        (chosen.row.querySelector(SEL.rowClick) || chosen.row).click();
+        if (!(await waitFor(() => isOpen(chosen.row, chosen.kind), 25, 120))) { return 'thread-mismatch'; }
     }
 
-    let box = await waitFor(() => document.querySelector(SEL.input), 15, 120);
+    // The selected row is not enough: the open pane must itself show this conversation, and hold the message box.  The
+    // pane can take a moment to load after a click.
+    const paneProblem = () => confirmPane(paneInfo(), chosen.kind, want, wantBody, chosen.byText);
+    if (paneProblem()) { await waitFor(() => !paneProblem(), 20, 120); }
+    const problem = paneProblem();
+    if (problem) { return problem; }
+
+    let box = await waitFor(composerEl, 15, 120);
     if (!box) { return 'input-not-found'; }
     const getText = () => (box.isContentEditable ? box.innerText : box.value) || '';
     const setText = (value) => {
@@ -93,7 +174,7 @@ async function pageReply(name, text, SEL, dryRun, body) {
     setText(text);
     await sleep(250);
 
-    const entry = document.querySelector(SEL.entry);
+    const entry = entryEl();
     const buttons = entry ? Array.from(entry.querySelectorAll('button')) : [];
     const label = (b) => norm([b.getAttribute('aria-label'), b.getAttribute('gv-test-id'), b.getAttribute('mattooltip'), b.title].join(' '));
     const send = buttons.find((b) => /send/.test(label(b)))
@@ -101,19 +182,22 @@ async function pageReply(name, text, SEL, dryRun, body) {
     if (!send) { restoreDraft(); return 'send-not-found'; }
     if (send.disabled) { await sleep(500); }
     if (send.disabled) { restoreDraft(); return 'send-disabled'; }
+    // The page can change while the text is being typed: the same conversation must still be open right now.
+    if (!isOpen(chosen.row, chosen.kind)) { restoreDraft(); return 'thread-mismatch'; }
+    const late = paneProblem();
+    if (late) { restoreDraft(); return late; }
     if (dryRun) { restoreDraft(); return 'ok-dryrun (send button: ' + (label(send) || send.tagName.toLowerCase()) + ')'; }
     send.click();
     // Google empties the message box once it accepts the message, so wait for that instead of assuming the click
-    // worked.  The box element can be re-created, so look it up again each time.  If our text is still there after
-    // about 3 s the send is "unconfirmed": the box is left alone (the text is not lost), nothing is retried (a slow
-    // send must not go out twice) and the caller tells the user to check the thread.
+    // worked.  The box element can be re-created, so look it up again each time (any message box still holding our text
+    // counts).  If our text is still there after about 3 s the send is "unconfirmed": the box is left alone (the text
+    // is not lost), nothing is retried (a slow send must not go out twice) and the caller tells the user to check the
+    // thread.
     const sentText = norm(text);
-    const stillInBox = () => {
-        const b = document.querySelector(SEL.input);
-        return !!b && norm(b.isContentEditable ? b.innerText : b.value).includes(sentText);
-    };
+    const stillInBox = () => Array.from(document.querySelectorAll(SEL.input))
+        .some((b) => norm(b.isContentEditable ? b.innerText : b.value).includes(sentText));
     if (!(await waitFor(() => !stillInBox(), 25, 120))) { return 'send-unconfirmed'; }
-    box = document.querySelector(SEL.input) || box;
+    box = composerEl() || box;
     if (draft) { await sleep(200); restoreDraft(); }
     return 'ok';
 }
@@ -124,6 +208,9 @@ async function pageReply(name, text, SEL, dryRun, body) {
 //   - the conversation is already open (Google marks it read by itself),
 //   - the open conversation has something typed in its message box (opening another thread must never risk a draft),
 //   - the Messages list isn't showing, or no thread matches the sender exactly (same matching rules as pageReply).
+// OUTSTANDING (separate from the reply fix): the row matching below is still the OLD logic.  When several rows match it
+// takes the first one, and it does not check the open pane.  It only opens a conversation (it never types), so the harm
+// is marking the wrong conversation read.  Left unchanged on purpose; it should move to pickThread/confirmPane later.
 async function pageMarkRead(name, body, SEL) {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const norm = (s) => (s || '').replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -156,8 +243,20 @@ async function pageMarkRead(name, body, SEL) {
     return (await waitFor(targetActive, 25, 120)) ? 'ok' : 'thread-mismatch';
 }
 
+// The script run inside the page for one reply: pageReply plus the three pure functions it is given.
+const replyScript = (title, text, body, dryRun = false) =>
+    `(${pageReply.toString()})(${JSON.stringify(title)}, ${JSON.stringify(text)}, ${JSON.stringify(SEL)}, ${dryRun ? 'true' : 'false'}, ` +
+    `${JSON.stringify(body || '')}, ${pickThread.toString()}, ${confirmThread.toString()}, ${confirmPane.toString()})`;
+
+// Results that mean "could not tell which conversation": shown to the person in plain words.
+const THREAD_CODES = ['thread-ambiguous', 'thread-not-found', 'thread-mismatch', 'pane-mismatch', 'composer-mismatch'];
+
 module.exports.SEL = SEL;
-module.exports.pageReplySource = pageReply.toString();   // exported so the reply path can be tested without sending
+module.exports.pickThread = pickThread;
+module.exports.confirmThread = confirmThread;
+module.exports.confirmPane = confirmPane;
+module.exports.replyScript = replyScript;     // exported so the reply path can be tested without sending
+module.exports.pageReplySource = pageReply.toString();
 module.exports.pageMarkReadSource = pageMarkRead.toString();
 
 // Google's send step (reCAPTCHA, then the request) does not run until the page is focused: with the window hidden,
@@ -253,9 +352,7 @@ module.exports.init = function ({ getWindow, onMessage, isTrustedSender = () => 
                 let result = 'no-window';
                 if (win && !win.isDestroyed()) {
                     try {
-                        const run = () => win.webContents.executeJavaScript(
-                            `(${pageReply.toString()})(${JSON.stringify(title)}, ${JSON.stringify(text)}, ${JSON.stringify(SEL)}, false, ${JSON.stringify(body || '')})`
-                        );
+                        const run = () => win.webContents.executeJavaScript(replyScript(title, text, body));
                         result = win.isFocused() ? await run() : await withPageFocus(win, run);
                     } catch (e) {
                         result = 'error';
@@ -268,7 +365,9 @@ module.exports.init = function ({ getWindow, onMessage, isTrustedSender = () => 
                         ? `Reply to ${title} not confirmed - check the thread`
                         : result === 'draft-present'
                             ? `Reply to ${title} not sent - you have unsent text in another conversation`
-                            : `Reply to ${title} not sent (${result})`;
+                            : THREAD_CODES.includes(result)
+                                ? `Reply to ${title} not sent - couldn't tell which conversation, open the app to reply`
+                                : `Reply to ${title} not sent (${result})`;
                     new Notification({ title: heading, body: text }).show();
                 }
             }).catch((e) => console.log(`${ts()} [reply] unexpected error: ${e && e.message}`));
