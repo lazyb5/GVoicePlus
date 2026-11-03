@@ -18,7 +18,7 @@ This is a fork of [latin-programmer/google-voice-desktop-app](https://github.com
 - **Notifications:** reply straight from a notification.
 - **Verification codes:** copy a 4 to 8 digit code from a text to the clipboard (without any letters, like the G- in Google codes). For codes of 6 or more digits it also marks the thread read afterwards. Mac only. Turn on "Copy verification codes" in Settings > General.
 - **Updates:** an optional notify-only check ("Tell me about updates"). It tells you when a new release exists and never installs anything.
-- **Images:** paste or drag-and-drop images into a message.
+- **Images:** drag and drop images into a message (pasting works natively in Google Voice).
 - **Also:** start at logon, start minimized to the tray, and spell checking.
 
 ## Install (Mac, Apple Silicon)
