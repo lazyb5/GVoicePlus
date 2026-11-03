@@ -1,13 +1,12 @@
 /**********************************************************************************************************************
- * Paste an image (Cmd+V) into the message box, or drag image files onto the open conversation, and have them attached
- * to the draft, like the "Add image" button does.
- * Google Voice keeps a hidden file input inside the compose area (gv-message-entry); the pasted image is handed to it
+ * Drag image files onto the open conversation and have them attached to the draft, like the "Add image" button does.
+ * (Pasting images is no longer handled here: Google Voice supports it natively now.)
+ * Google Voice keeps a hidden file input inside the compose area (gv-message-entry); the dropped image is handed to it
  * as if it had been picked from the file dialog.  Nothing is ever sent automatically: the image shows up as an
  * attachment and the person presses Send.
  *
  * The input only accepts JPEG, PNG, GIF and BMP.  Small images in those formats pass through untouched; anything else
  * (WebP, TIFF, ...) or anything large is redrawn on a canvas, capped at 2048 px on its longest side, and saved as JPEG.
- * Plain-text pastes are left alone.
  **********************************************************************************************************************/
 
 // Runs INSIDE the Google Voice page (stringified and executed there), so it must be fully self-contained.
@@ -73,24 +72,6 @@ function pageImagePaste() {
         input.files = dt.files;
         input.dispatchEvent(new Event('change', { bubbles: true }));
     };
-
-    document.addEventListener('paste', (e) => {
-        const entry = e.target && e.target.closest ? e.target.closest('gv-message-entry') : null;
-        if (!entry) { return; }   // only pastes into the message box
-        const items = e.clipboardData && e.clipboardData.items;
-        if (!items) { return; }
-        let file = null;
-        for (const item of items) {
-            if (item.kind === 'file' && item.type.indexOf('image/') === 0) { file = item.getAsFile(); break; }
-        }
-        if (!file) { return; }   // text paste: leave it alone
-        if (!entry.querySelector('input[type="file"]')) { return; }   // Google's markup changed: don't swallow the paste
-        e.preventDefault();
-        e.stopPropagation();
-        prepare(file)
-            .then((f) => attach(entry, f))
-            .catch(() => toast('Could not attach the pasted image'));
-    }, true);
 
     // Drag and drop: drop image files anywhere on the open conversation.  Any file dropped on the window is also kept
     // from navigating the window to the file, which is what Electron does by default.
