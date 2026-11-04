@@ -123,7 +123,8 @@
         const b = e.target.closest('.theme-swatch');
         if (b) { chooseTheme(b.dataset.id); }
     });
-    modeButtons.forEach((btn) => btn.addEventListener('click', () => {
+    modeButtons.forEach((btn) => btn.addEventListener('click', (e) => {
+        if (e.detail) { btn.blur(); }   // mouse click: drop the focus ring (keyboard use, detail 0, keeps it)
         mode = btn.dataset.mode;
         const m = /^m3-(.*)-(dark|light)$/.exec(selectedTheme);
         if (m) { chooseTheme(m3Id(m[1])); } else { renderThemes(); }   // a classic theme stays; only the swatches change

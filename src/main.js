@@ -12,6 +12,7 @@ const topBar = require('./utils/topBar');
 const sideNav = require('./utils/sideNav');
 const unreadWatcher = require('./utils/unreadWatcher');
 const imagePaste = require('./utils/imagePaste');
+const dialerButton = require('./utils/dialerButton');
 const themePalette = require('./utils/themePalette');
 const accountMenuTheme = require('./utils/accountMenuTheme');
 const Store = require('./utils/prefsStore');   // tiny replacement for electron-store (same config.json)
@@ -416,9 +417,12 @@ function createWindow() {
         if (!urlPolicy.isVoiceUrl(page.webContents.getURL())) { return; }   // the Google sign-in pages are left exactly as Google serves them
         const hideDialerSidebar = store.get('prefs.hideDialerSidebar') || constants.DEFAULT_HIDE_DIALER_SIDEBAR;
         cssInjector.showHideDialerSidebar(hideDialerSidebar);
+        cssInjector.injectMotion();
         topBar.apply(page, hiddenTopBarItems());
         unreadWatcher.start(page);
         imagePaste.start(page);
+        dialerButton.start(page);
+        dialerButton.setPalette(page, themePalette.get(appPath, currentTheme()));
     });
 
     // The profile-picture dropdown is a separate embedded page, so it is themed on its own (accountMenuTheme.js).  It loads
@@ -866,6 +870,7 @@ listen(senderIsSettings, 'pref-change-theme', (theme) => ipcGuard.isThemeId(them
     const pageTheme = themeForCurrentPage(theme);
     cssInjector.injectTheme(pageTheme);
     accountMenuTheme.apply(page, themePalette.get(appPath, theme));
+    dialerButton.setPalette(page, themePalette.get(appPath, theme));
     applyNativeScheme(theme);
     if (titleBar.enabled()) {
         const pal = themePalette.get(appPath, theme);

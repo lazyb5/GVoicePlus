@@ -1,9 +1,29 @@
 const fs = require('fs');
 const path = require('path');
+const { SHOW_CLASS, setHidden } = require('./dialerButton');
 
 const THEMES_DIR = ['src', 'themes'];
 const SHARED = ['base.scss', 'mappings.scss', 'm3.scss'];   // pieces that every theme is built from
-const HIDE_DIALER_SIDEBAR_CSS = `gv-call-sidebar { display: none }`;
+// The dialer button on the Calls page (dialerButton.js) lifts this by putting SHOW_CLASS on <html>.
+const HIDE_DIALER_SIDEBAR_CSS = `html:not(.${SHOW_CLASS}) gv-call-sidebar { display: none }
+@keyframes gvp-dialer-in { from { opacity: 0; transform: translateX(16px) } to { opacity: 1; transform: none } }
+html.${SHOW_CLASS} gv-call-sidebar { animation: gvp-dialer-in .2s ease-out }
+@media (prefers-reduced-motion: reduce) { html.${SHOW_CLASS} gv-call-sidebar { animation: none } }`;
+
+// A little life for the Google Voice page: soft colour fades on hover/selection, a slight grow on the dial pad button.
+// Only colours and transforms are animated (cheap, no layout work), it is plain CSS (nothing runs while you use the app)
+// and it is switched off entirely when the system asks for reduced motion.
+const MOTION_CSS = `@media (prefers-reduced-motion: no-preference) {
+  gv-thread-list-item .container,
+  gv-side-nav a.navListItem,
+  gv-ogb-audio-button button, gv-ogb-help-button button, gv-ogb-settings-button button,
+  [aria-label="Main menu"], a[aria-label="Google apps"], a[aria-label^="Google Account"] {
+    transition: background-color .15s ease, color .15s ease;
+  }
+  .gvp-dialer-btn { transition: transform .15s ease, filter .15s ease }
+  .gvp-dialer-btn:hover { transform: scale(1.08) }
+  .gvp-dialer-btn:active { transform: scale(.94) }
+}`;
 
 // Sass is only needed to (re)build a theme's CSS, so it is loaded the first time that happens and never in a packaged
 // build, where the CSS is compiled ahead of time (scripts/build-themes.js).  That keeps ~4 MB of JavaScript, and the
@@ -68,6 +88,7 @@ class Injector {
 
     showHideDialerSidebar(hide) {
         if (!this.win) return;
+        setHidden(this.win, !!hide);
 
         if (hide) {
             this.win.webContents.insertCSS(HIDE_DIALER_SIDEBAR_CSS).then(key => {
@@ -78,6 +99,14 @@ class Injector {
                 this.win.webContents.removeInsertedCSS(this.sidebarStyleKey);
             }
         }
+    }
+
+    injectMotion() {
+        if (!this.win) return;
+        const previous = this.motionKey;
+        this.motionKey = null;
+        if (previous) { this.win.webContents.removeInsertedCSS(previous).catch(() => {}); }
+        this.win.webContents.insertCSS(MOTION_CSS).then(key => { this.motionKey = key; }).catch(() => {});
     }
 
     injectTheme(theme) {
@@ -106,4 +135,6 @@ class Injector {
 
 module.exports = Injector;
 module.exports.themeCss = themeCss;
+module.exports.MOTION_CSS = MOTION_CSS;   // used by tests
+module.exports.HIDE_DIALER_SIDEBAR_CSS = HIDE_DIALER_SIDEBAR_CSS;   // used by tests
 module.exports.compileTheme = compileTheme;   // used by scripts/build-themes.js
