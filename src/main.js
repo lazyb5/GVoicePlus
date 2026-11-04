@@ -20,6 +20,7 @@ const { pathToFileURL } = require('url');
 const urlPolicy = require('./utils/urlPolicy');
 const ipcGuard = require('./utils/ipcGuard');
 const windowPrefs = require('./utils/windowPrefs');
+const startMenuShortcut = require('./utils/startMenuShortcut');
 const permissionPolicy = require('./utils/permissionPolicy');
 const { notificationShim } = require('./utils/notificationShim');
 
@@ -221,15 +222,18 @@ contextMenu({
 // This will be displayed in all system Toasts that get generated to display notifications
 // to the user.  If we don't do this, "electron.app.Electron" will be displayed instead.
 if (isWindows()){
-    app.setAppUserModelId(constants.APPLICATION_NAME);
+    app.setAppUserModelId(startMenuShortcut.APP_USER_MODEL_ID);
 
     // Windows only shows (and reliably delivers) toasts for an app that has a Start Menu shortcut carrying its app ID.
-    // Without one, Windows creates it when the first notification is sent and that first toast can be lost.  Creating
-    // or refreshing the shortcut at startup avoids that.  The shortcut points at this exe and the app ID above.
+    // The installer makes one (same ID as above).  When neither the installer's nor an earlier one exists (dev runs,
+    // portable copies), create one at startup so the first notification is not lost.  Never add a second one next to the
+    // installer's: two shortcuts for one app confused which icon the taskbar uses.
     try {
-        const shortcut = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${constants.APPLICATION_NAME}.lnk`);
-        const options = { target: process.execPath, cwd: path.dirname(process.execPath), appUserModelId: constants.APPLICATION_NAME, icon: process.execPath, iconIndex: 0 };
-        shell.writeShortcutLink(shortcut, fs.existsSync(shortcut) ? 'replace' : 'create', options);
+        const paths = startMenuShortcut.startMenuShortcutPaths(app.getPath('appData'), process.env.ProgramData || 'C:\\ProgramData', constants.APPLICATION_NAME);
+        if (startMenuShortcut.shouldWriteShortcut(paths, fs.existsSync)) {
+            const options = { target: process.execPath, cwd: path.dirname(process.execPath), appUserModelId: startMenuShortcut.APP_USER_MODEL_ID, icon: process.execPath, iconIndex: 0 };
+            shell.writeShortcutLink(paths.user, 'create', options);
+        }
     } catch (e) { console.log(`Could not write the Start Menu shortcut: ${e && e.message}`); }
 }
 
