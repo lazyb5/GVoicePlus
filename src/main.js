@@ -44,14 +44,20 @@ const imageFile = (file) => path.join(appPath, 'images', file);
 const customIconFile = () => path.join(app.getPath('userData'), 'custom-icon.png');
 const hasCustomIcon = () => fs.existsSync(customIconFile());
 
+// The Mac menu bar icon when "Show my app icon in the menu bar" is on: drawn from the picture at 20pt (40px @2x) with a
+// clearly visible unread dot (about a third of the icon's width), because the small 16pt icons and their dot were hard to see.
+const MAC_MENU_BAR = { size: 40, badge: 0.21, inner: 0.80, red: [0xff, 0x3b, 0x30] };
+
 // The images for a choice.  Anything unknown, or a custom picture that has gone missing, gives the default set.
 function loadIcons(id) {
+    const colourTray = process.platform === 'darwin' && store.get('prefs.colourMenuBarIcon') === true;   // Mac only, off by default
     if (id === 'custom' && hasCustomIcon()) {
         // The picture is the Dock and window icon.  The menu bar / tray icon on a Mac stays a built-in one (it has to be a
-        // single-colour template); on Windows and Linux it is the picture with an unread dot added.
+        // single-colour template) unless "Show my app icon in the menu bar" is on; on Windows and Linux it is always the
+        // picture with an unread dot added.
         try {
             const file = customIconFile();
-            const trayImages = process.platform === 'darwin' ? null : customIcon.trayImages(file);
+            const trayImages = process.platform !== 'darwin' ? customIcon.trayImages(file) : (colourTray ? customIcon.trayImages(file, MAC_MENU_BAR) : null);
             const builtin = iconSets.get('sunset');
             return {
                 id: 'custom',
@@ -63,12 +69,17 @@ function loadIcons(id) {
         } catch (e) { console.log(`Could not use the custom icon: ${e && e.message}`); }
     }
     const set = iconSets.get(id === 'custom' ? undefined : id);
+    let macColour = null;
+    if (colourTray) {
+        try { macColour = customIcon.trayImages(imageFile(set.dock), MAC_MENU_BAR); }
+        catch (e) { console.log(`Could not draw the colour menu bar icon: ${e && e.message}`); }   // falls back to the white icon
+    }
     return {
         id: set.id,
         window: imageFile(set.window),
         dock: nativeImage.createFromPath(imageFile(set.dock)),
-        tray: imageFile(set.tray),
-        trayDirty: imageFile(set.trayDirty)
+        tray: macColour ? macColour.plain : imageFile(set.tray),
+        trayDirty: macColour ? macColour.dirty : imageFile(set.trayDirty)
     };
 }
 let icons = loadIcons(store.get('prefs.appIcon'));
@@ -825,7 +836,8 @@ answer(senderIsSettings, 'settings-get-init', none, () => ({
         DEFAULT_SETTING_THEME: constants.DEFAULT_SETTING_THEME,
         DEFAULT_SETTING_START_MINIMIZED: constants.DEFAULT_SETTING_START_MINIMIZED,
         DEFAULT_SETTING_EXIT_ON_CLOSE: constants.DEFAULT_SETTING_EXIT_ON_CLOSE,
-        DEFAULT_HIDE_DIALER_SIDEBAR: constants.DEFAULT_HIDE_DIALER_SIDEBAR
+        DEFAULT_HIDE_DIALER_SIDEBAR: constants.DEFAULT_HIDE_DIALER_SIDEBAR,
+        DEFAULT_COLOUR_MENU_BAR_ICON: constants.DEFAULT_COLOUR_MENU_BAR_ICON
     }
 }));
 
@@ -930,6 +942,12 @@ answer(senderIsSettings, 'get-icon-sets', none, () => ({
 listen(senderIsSettings, 'pref-change-app-icon', (id) => typeof id === 'string' && (iconSets.has(id) || (id === 'custom' && hasCustomIcon())), (e, id) => {
     savePref('appIcon', id);
     applyIconSet(id);
+});
+
+// Called when "Show my app icon in the menu bar" (Mac) is checked/unchecked.  Applies at once and is remembered.
+listen(senderIsSettings, 'pref-change-colour-menu-bar-icon', isBool, (e, on) => {
+    savePref('colourMenuBarIcon', on);
+    applyIconSet(store.get('prefs.appIcon'));
 });
 
 // "Choose your own image...": shows a file picker; a usable picture is saved and applied.  Answers 'ok', 'cancelled'

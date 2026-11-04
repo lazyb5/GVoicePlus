@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('gvSettings', {
     setSpellcheck: send('pref-change-spellcheck', isBool),
     setCopyCodes: send('pref-change-copy-codes', isBool),
     setCheckUpdates: send('pref-change-check-updates', isBool),
+    setColourMenuBarIcon: send('pref-change-colour-menu-bar-icon', isBool),
     setAppIcon: send('pref-change-app-icon', (v) => typeof v === 'string' && /^[a-z0-9-]{1,40}$/.test(v)),
     setTopbarHidden: send('pref-change-topbar-hidden', isKeyList),
 

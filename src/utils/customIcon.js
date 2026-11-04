@@ -22,10 +22,12 @@ function padToSquare(bitmap, w, h, size = SIZE) {
     return out;
 }
 
-// Draws a red "unread" dot with a white ring in the top-right corner of a size x size bitmap, in place.
-function drawBadge(bitmap, size) {
-    const outer = size * 0.24;
-    const inner = outer * 0.74;
+// Draws a red "unread" dot with a white ring in the top-right corner of a size x size bitmap, in place.  The defaults are the
+// Windows/Linux look; the Mac menu bar icon passes a bigger dot (see MAC_MENU_BAR in main.js).
+function drawBadge(bitmap, size, opts = {}) {
+    const outer = size * (opts.badge || 0.24);
+    const inner = outer * (opts.inner || 0.74);
+    const [r, g, b] = opts.red || [0xe5, 0x25, 0x2a];
     const cx = size - outer - 0.5;
     const cy = outer + 0.5;
     for (let y = 0; y < size; y++) {
@@ -33,9 +35,9 @@ function drawBadge(bitmap, size) {
             if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy) > outer) { continue; }
             const red = Math.hypot(x + 0.5 - cx, y + 0.5 - cy) <= inner;
             const i = (y * size + x) * 4;
-            bitmap[i] = red ? 0x2a : 255;       // blue
-            bitmap[i + 1] = red ? 0x25 : 255;   // green
-            bitmap[i + 2] = red ? 0xe5 : 255;   // red
+            bitmap[i] = red ? b : 255;       // blue
+            bitmap[i + 1] = red ? g : 255;   // green
+            bitmap[i + 2] = red ? r : 255;   // red
             bitmap[i + 3] = 255;
         }
     }
@@ -82,15 +84,17 @@ function prepare(sourceFile, destFile) {
     return true;
 }
 
-// The Windows/Linux tray images made from the saved picture: normal, and with the unread dot.
-function trayImages(file) {
+// Tray images made from a picture: normal, and with the unread dot.  `size` is the @2x pixel size (32 = a 16pt icon); the
+// badge options go to drawBadge.  The defaults are the Windows/Linux look.
+function trayImages(file, opts = {}) {
     const { nativeImage } = require('electron');
-    const small = nativeImage.createFromPath(file).resize({ width: 32, height: 32, quality: 'best' });
+    const size = opts.size || 32;
+    const small = nativeImage.createFromPath(file).resize({ width: size, height: size, quality: 'best' });
     const plain = Buffer.from(small.toBitmap());
-    if (plain.length !== 32 * 32 * 4) { throw new Error('unexpected icon size'); }
+    if (plain.length !== size * size * 4) { throw new Error('unexpected icon size'); }
     const dirty = Buffer.from(plain);
-    drawBadge(dirty, 32);
-    const make = (bitmap) => nativeImage.createFromBitmap(bitmap, { width: 32, height: 32, scaleFactor: 2 });
+    drawBadge(dirty, size, opts);
+    const make = (bitmap) => nativeImage.createFromBitmap(bitmap, { width: size, height: size, scaleFactor: 2 });
     return { plain: make(plain), dirty: make(dirty) };
 }
 

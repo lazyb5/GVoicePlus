@@ -286,6 +286,14 @@
         }
     } catch (e) { /* older main process: no icon choice */ }
 
+    // "Show my app icon in the menu bar" (Mac only, off by default); takes effect immediately.
+    if (init.platform === 'darwin') {
+        const colourBar = document.getElementById('colour-menu-bar-icon');
+        document.getElementById('colour-menu-bar-row').style.display = '';
+        colourBar.checked = prefs.colourMenuBarIcon === true;
+        colourBar.addEventListener('change', (e) => { api.setColourMenuBarIcon(e.target.checked); });
+    }
+
     // Set the "copy verification codes" checkbox (off by default); it takes effect immediately.
     const copyCodes = document.getElementById('copy-codes');
     if (init.platform === 'win32') { document.getElementById('copy-codes-row').style.display = 'none'; }   // Windows notifications have their own Copy button
