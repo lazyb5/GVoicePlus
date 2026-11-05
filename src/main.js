@@ -6,6 +6,7 @@ const AutoLaunch = require('auto-launch')
 const contextMenu = require('electron-context-menu');
 const BadgeGenerator = require('./badge_generator');
 const path = require('path');
+const { execFile } = require('child_process');
 const fs = require('fs');
 const CSSInjector = require('./utils/cssInjector');
 const topBar = require('./utils/topBar');
@@ -21,6 +22,7 @@ const urlPolicy = require('./utils/urlPolicy');
 const ipcGuard = require('./utils/ipcGuard');
 const windowPrefs = require('./utils/windowPrefs');
 const startMenuShortcut = require('./utils/startMenuShortcut');
+const icoFile = require('./utils/icoFile');
 const permissionPolicy = require('./utils/permissionPolicy');
 const { notificationShim } = require('./utils/notificationShim');
 
@@ -91,6 +93,33 @@ function applyIconSet(id) {
     app.dock && app.dock.setIcon(icons.dock);
     tray && tray.setImage(lastNotification > 0 ? icons.trayDirty : icons.tray);
     if (process.platform !== 'darwin' && win && !win.isDestroyed()) { win.setIcon(icons.window); }   // macOS windows have no icon
+    refreshStartMenuShortcut();
+}
+
+// Windows: writes (or refreshes) the app's own Start Menu shortcut so that it carries the chosen icon.  The picture is
+// shrunk to 256 px and wrapped in an .ico in the app's data folder, because a shortcut's icon has to be a file on disk.
+function refreshStartMenuShortcut() {
+    if (!isWindows()) { return; }
+    try {
+        const png = nativeImage.createFromPath(icons.window).resize({ width: 256, height: 256, quality: 'best' }).toPNG();
+        const ico = path.join(app.getPath('userData'), `taskbar-${icons.id}.ico`);
+        fs.writeFileSync(ico, icoFile.pngToIco(png));
+        const paths = startMenuShortcut.startMenuShortcutPaths(app.getPath('appData'), process.env.ProgramData || 'C:\\ProgramData', constants.APPLICATION_NAME);
+        const options = { target: process.execPath, cwd: path.dirname(process.execPath), appUserModelId: startMenuShortcut.APP_USER_MODEL_ID, icon: ico, iconIndex: 0 };
+        shell.writeShortcutLink(paths.user, fs.existsSync(paths.user) ? 'replace' : 'create', options);
+        notifyShellIconsChanged();
+    } catch (e) { console.log(`Could not write the Start Menu shortcut: ${e && e.message}`); }
+}
+
+// Windows keeps the first icon it saw for the app's shortcut.  After rewriting the shortcut, tell the shell that icons
+// changed so it reads the new one.  Fixed command, no user input; fire and forget; rapid changes are merged into one.
+let shellNotifyTimer = null;
+function notifyShellIconsChanged() {
+    clearTimeout(shellNotifyTimer);
+    shellNotifyTimer = setTimeout(() => {
+        const script = "$s='[DllImport(\"shell32.dll\")] public static extern void SHChangeNotify(int e,int f,IntPtr a,IntPtr b);'; Add-Type -MemberDefinition $s -Name N -Namespace W; [W.N]::SHChangeNotify(0x08000000,0,[IntPtr]::Zero,[IntPtr]::Zero)";
+        execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true }, () => {});
+    }, 1500);
 }
 
 // Developer aid: `GV_DEBUG_PORT=9222 npm start` exposes Chromium's debugging port on localhost only, so the page
@@ -225,16 +254,10 @@ if (isWindows()){
     app.setAppUserModelId(startMenuShortcut.APP_USER_MODEL_ID);
 
     // Windows only shows (and reliably delivers) toasts for an app that has a Start Menu shortcut carrying its app ID.
-    // The installer makes one (same ID as above).  When neither the installer's nor an earlier one exists (dev runs,
-    // portable copies), create one at startup so the first notification is not lost.  Never add a second one next to the
-    // installer's: two shortcuts for one app confused which icon the taskbar uses.
-    try {
-        const paths = startMenuShortcut.startMenuShortcutPaths(app.getPath('appData'), process.env.ProgramData || 'C:\\ProgramData', constants.APPLICATION_NAME);
-        if (startMenuShortcut.shouldWriteShortcut(paths, fs.existsSync)) {
-            const options = { target: process.execPath, cwd: path.dirname(process.execPath), appUserModelId: startMenuShortcut.APP_USER_MODEL_ID, icon: process.execPath, iconIndex: 0 };
-            shell.writeShortcutLink(paths.user, 'create', options);
-        }
-    } catch (e) { console.log(`Could not write the Start Menu shortcut: ${e && e.message}`); }
+    // Without one, Windows creates it when the first notification is sent and that first toast can be lost.  So the app
+    // keeps its own shortcut, and gives it the chosen app icon: the taskbar button shows the icon of the shortcut that has
+    // the window's app ID, not the window's own icon.  (The installer's shortcut has a different ID, see startMenuShortcut.js.)
+    refreshStartMenuShortcut();
 }
 
 // Ask for permission to use the microphone if the OS requires it
