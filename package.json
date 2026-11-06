@@ -53,7 +53,7 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
+      "createStartMenuShortcut": false,
       "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
     }
   },
