@@ -155,6 +155,7 @@ gv-message-item .message-row:not(.outgoing) .bubble {
 gv-message-entry textarea {
     background-color: $container-high;
     border-radius: 12px;
+    padding-left: 12px;   /* keeps the caret clear of the rounded edge */
 }
 
 /* The shared base paints this box with the selection tint, which needs the deeper text shade.  The longer selector is so
