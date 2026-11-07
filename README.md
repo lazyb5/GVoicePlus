@@ -12,9 +12,12 @@ This is a fork of [latin-programmer/google-voice-desktop-app](https://github.com
 
 - **Themes:** Material-style colours in Dark and Light, plus the classic themes (Dracula, Solar, Minty, Cerulean, DarkPlus). Pick one in Settings > Appearance.
 - **App icon:** 13 colours of one speech-bubble icon, or choose your own image (PNG, JPG or `.icns`). Settings > Appearance.
+- **Mac menu bar icon:** optionally show your chosen app icon in colour in the menu bar, with a red dot for unread messages, instead of the white icon. Mac only, off by default. Settings > Appearance, "Show my app icon in the menu bar".
 - **Zoom:** a zoom box in Settings > Appearance. The zoom keys (Cmd/Ctrl +, -, 0) always change the main window, and the box follows them.
 - **Top bar:** click a picture of Google Voice's top bar to hide or show its items (menu, logo, search, status, Upgrade, audio, help, settings, apps, account). Settings > Layout.
 - **Sidebars:** hide the dialer sidebar, collapse the main sidebar, or collapse it and show it again when you hover. Settings > Layout.
+- **Dial pad button:** while the dialer sidebar is hidden, a dial pad button at the bottom right of the Calls page shows or hides the dialer.
+- **Motion:** soft hover fades on list rows, sidebar items and top bar buttons. It respects your system's reduced-motion setting.
 - **Notifications:** reply straight from a notification.
 - **Verification codes:** copy a 4 to 8 digit code from a text to the clipboard (without any letters, like the G- in Google codes). For codes of 6 or more digits it also marks the thread read afterwards. Mac only. Turn on "Copy verification codes" in Settings > General.
 - **Updates:** an optional notify-only check ("Tell me about updates"). It tells you when a new release exists and never installs anything.
@@ -42,7 +45,7 @@ This is a fork of [latin-programmer/google-voice-desktop-app](https://github.com
 Open **GVoicePlus > Settings** in the Mac menu bar (or `File > Settings` on Windows and Linux). The tray icon also opens it.
 
 - **General:** menu bar, start at logon, start minimized, exit on close, spelling, verification codes, update notices.
-- **Appearance:** theme, zoom, app icon.
+- **Appearance:** theme, zoom, app icon, menu bar icon (Mac).
 - **Layout:** top bar items and sidebars.
 
 Want to make a theme? See [THEMES.md](THEMES.md).
