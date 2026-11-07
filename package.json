@@ -1,6 +1,6 @@
 {
   "name": "voice-desktop-app",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Unofficial desktop app for Google Voice (not affiliated with Google)",
   "main": "src/main.js",
   "build": {
