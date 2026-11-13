@@ -7,8 +7,8 @@ const APPLICATION_NAME = 'GVoicePlus';
 
 // URLs
 const URL_GOOGLE_VOICE           = 'https://voice.google.com'
-const URL_GITHUB_README          = 'https://github.com/lazyb5/GVoicePlus/blob/master/README.md'
-const URL_GITHUB_SECURITY_POLICY = 'https://github.com/lazyb5/GVoicePlus/blob/master/SECURITY.md'
+const URL_GITHUB_README          = 'https://github.com/lazyb5/GVoicePlus/blob/HEAD/README.md'
+const URL_GITHUB_SECURITY_POLICY = 'https://github.com/lazyb5/GVoicePlus/blob/HEAD/SECURITY.md'
 const URL_GITHUB_VIEW_ISSUES     = 'https://github.com/lazyb5/GVoicePlus/issues';
 const URL_GITHUB_REPORT_BUG      = 'https://github.com/lazyb5/GVoicePlus/issues/new?labels=bug';
 const URL_GITHUB_FEATURE_REQUEST = 'https://github.com/lazyb5/GVoicePlus/issues/new?labels=enhancement';
