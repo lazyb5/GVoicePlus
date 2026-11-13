@@ -208,13 +208,13 @@
     <p class="lede">You still sign in with your own Google account and use the normal Google Voice website. GVoicePlus adds the parts around it.</p>
     <div class="grid">
       <div class="card"><svg aria-hidden="true"><use href="#i-theme"/></svg><h3>Themes</h3><p>Material-style colors in Dark and Light, plus classic themes like Dracula, Solar, Minty, Cerulean and DarkPlus.</p></div>
-      <div class="card"><svg aria-hidden="true"><use href="#i-icon"/></svg><h3>App icons</h3><p>13 colors of one speech-bubble icon, or use your own image (PNG, JPG or <code>.icns</code>).</p></div>
+      <div class="card"><svg aria-hidden="true"><use href="#i-icon"/></svg><h3>App icons</h3><p>13 colors of one speech-bubble icon, or use your own image (PNG, JPG or <code>.icns</code>). On a Mac you can also show it in color in the menu bar.</p></div>
       <div class="card"><svg aria-hidden="true"><use href="#i-zoom"/></svg><h3>Zoom</h3><p>Set a zoom level in Settings, or use the usual keys (Cmd or Ctrl with +, - and 0). The box follows the keys.</p></div>
       <div class="card"><svg aria-hidden="true"><use href="#i-top"/></svg><h3>Your top bar</h3><p>Click a picture of Google Voice's top bar to hide or show its items: menu, search, status, Upgrade, help, apps and more.</p></div>
-      <div class="card"><svg aria-hidden="true"><use href="#i-side"/></svg><h3>Sidebars on your terms</h3><p>Hide the dialer sidebar, or collapse the main sidebar and have it reappear when you hover.</p></div>
+      <div class="card"><svg aria-hidden="true"><use href="#i-side"/></svg><h3>Sidebars on your terms</h3><p>Hide the dialer sidebar and bring it back with a dial pad button on the Calls page, or collapse the main sidebar and have it reappear when you hover.</p></div>
       <div class="card"><svg aria-hidden="true"><use href="#i-reply"/></svg><h3>Reply from notifications</h3><p>Answer a text straight from its notification without switching windows. Works on Mac and Windows.</p></div>
       <div class="card"><svg aria-hidden="true"><use href="#i-code"/></svg><h3>Verification codes</h3><p><b>Mac only.</b> Copies a 4 to 8 digit code from a text to your clipboard. For codes of 6 or more digits it also marks the thread read. Off until you turn it on.</p></div>
-      <div class="card"><svg aria-hidden="true"><use href="#i-image"/></svg><h3>Images</h3><p>Paste or drag and drop images into a message.</p></div>
+      <div class="card"><svg aria-hidden="true"><use href="#i-image"/></svg><h3>Images</h3><p>Drag and drop images into a message. Pasting works natively in Google Voice.</p></div>
       <div class="card"><svg aria-hidden="true"><use href="#i-power"/></svg><h3>Stays out of the way</h3><p>Start at logon, start minimized to the tray, exit on close if you want, and spell checking.</p></div>
     </div>
   </section>
@@ -295,14 +295,14 @@
 
   <section id="download" aria-labelledby="dl-h">
     <p class="eyebrow">Download</p>
-    <h2 id="dl-h">Get GVoicePlus 1.0.0</h2>
+    <h2 id="dl-h">Get GVoicePlus 1.0.1</h2>
     <p class="lede">Pick your platform. Downloads are on the GitHub Releases page.</p>
     <div class="plats">
       <div class="plat"><b>macOS</b><span class="status">Main platform</span>
         <p>Apple Silicon. Download the <code>.dmg</code> or the <code>.zip</code>. This is the best tested version.</p>
         <a class="btn primary" href="https://github.com/lazyb5/GVoicePlus/releases/latest">Download for Mac</a></div>
       <div class="plat"><b>Windows</b><span class="status warn">Tested in a VM</span>
-        <p>64-bit installer (<code>GVoicePlus-Setup-1.0.0-x64.exe</code>). It works in a virtual machine and has not been tried on a physical PC yet.</p>
+        <p>64-bit installer (<code>GVoicePlus-Setup-1.0.1-x64.exe</code>). It works in a virtual machine and has not been tried on a physical PC yet.</p>
         <a class="btn primary" href="https://github.com/lazyb5/GVoicePlus/releases/latest">Download for Windows</a></div>
       <div class="plat"><b>Linux</b><span class="status warn">Build from source</span>
         <p>No download, and not officially tested. Reply from notifications is not expected to work, and GNOME may need an AppIndicator extension for the tray icon.</p>
@@ -311,7 +311,7 @@
 
     <div class="steps">
       <h3>First launch</h3>
-      <p class="note" style="margin-top:6px">The apps are not code signed, so macOS and Windows both show a warning the first time.</p>
+      <p class="note" style="margin-top:6px">The apps are not signed with a developer certificate, so macOS and Windows both show a warning the first time.</p>
       <ol>
         <li><b>Mac:</b> drag GVoicePlus into Applications. Then run this once in Terminal and open the app.
 <pre>xattr -dr com.apple.quarantine "/Applications/GVoicePlus.app"</pre></li>
@@ -324,6 +324,13 @@
     <p class="eyebrow">Privacy</p>
     <h2>Your account stays yours</h2>
     <p>Your sign-in and settings are stored on your computer. Besides Google Voice itself, the only network request GVoicePlus adds is the optional update check, which asks GitHub for the latest release of this project. It tells you when a new version exists and never installs anything.</p>
+  </div>
+
+  <div class="privacy" style="margin-top:24px">
+    <p class="eyebrow">Security</p>
+    <h2>Locked down more in 1.0.1</h2>
+    <p>Google Voice runs in its own window with no Node access, and context isolation and the sandbox are on. The page only gets a notification bridge and an unread count hook. Web permissions are limited to the microphone (never the camera) and notifications, for voice.google.com only. Everything else, such as location and clipboard read, is refused. Messages between the app's windows are checked, and Electron is updated to v44.</p>
+    <p>Transparency: GVoicePlus is a hobby project built with the help of AI coding tools by someone with limited coding experience. It has an automated test suite, but it has not been independently audited. The code is open, so you can read it. If you find a problem, please <a href="https://github.com/lazyb5/GVoicePlus/issues">report an issue</a>.</p>
   </div>
 
   <footer>
